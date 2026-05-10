@@ -50,3 +50,48 @@ Bu dosya proje boyunca karşılaşılan hataları, kök nedenlerini ve çözüml
 **Çözüm:** `print()` içindeki emoji karakterleri ASCII-safe metinlerle değiştirildi.
 
 **Dosya(lar):** `backend/app/main.py`
+
+---
+
+### ERR-003: Qdrant CollectionInfo — vectors_count Attribute Hatasi
+**Tarih:** 2026-05-10  |  **Bilesen:** RAG  |  **Onem:** Dusuk
+
+**Hata:** `AttributeError: 'CollectionInfo' object has no attribute 'vectors_count'`
+
+**Baglam:** Pipeline basarili calistiktan sonra `get_collection_info()` cagrisinda hata aldi.
+
+**Kok Neden:** Yeni Qdrant client surumleri `CollectionInfo` objesinden `vectors_count` field'ini kaldirmis.
+
+**Cozum:** `vectors_count` satirı silindi, sadece `points_count` kullanildi.
+
+**Dosya(lar):** `backend/app/rag/qdrant_store.py`
+
+---
+
+### ERR-004: Qdrant Filtre — prescription_required Alani Yok
+**Tarih:** 2026-05-10  |  **Bilesen:** RAG/LangGraph  |  **Onem:** Yuksek
+
+**Hata:** Uretici modunda chat endpoint 500 hatasi verdi.
+
+**Baglam:** Retriever node'da `prescription_required=False` filtresi uygulaniyordu, ancak chunk metadata'sinda bu alan henuz tanimli degil.
+
+**Kok Neden:** Chunk metadata'sina `prescription_required` field'i eklenmemisti, Qdrant var olmayan field'a filtre uygulayinca hata verdi.
+
+**Cozum:** Filtre gecici olarak kaldirildi. Rol bazli icerik kontrolu generator prompt'a birakildi. Ileride dokuman metadata'sina `prescription_required` eklendikce filtre aktiflestirilecek.
+
+**Dosya(lar):** `backend/app/graph/nodes/retriever.py`
+
+---
+
+### ERR-005: Groq Rate Limit (429) ve Critic Döngüsü
+**Tarih:** 2026-05-11  |  **Bileşen:** LangGraph/Generator  |  **Önem:** Yüksek
+
+**Hata:** `Error code: 429 - Rate limit reached for model llama-3.3-70b-versatile...`
+
+**Bağlam:** Yoğun E2E testleri sırasında Groq'un günlük ücretsiz kullanım limiti (100K token) dolduğunda, Generator node'u 429 hatası fırlatarak fallback yanıtı (ham kaynak metni) döndürüyordu.
+
+**Kök Neden:** Fallback olarak dönülen ham metin, formata veya referans kurallarına uymadığı için Critic tarafından reddediliyordu. Bu durum, Generator'ın 429 hatası almasına rağmen tekrar tekrar çalışmasına ve token limitlerinin daha da aşılmasına yol açıyordu.
+
+**Çözüm:** Critic node'una bir kontrol eklendi: Eğer gelen yanıt `fallback` durumundaysa, Critic kontrolleri atlanarak yanıt (retry yapılmadan) direkt kabul ediliyor.
+
+**Dosya(lar):** `backend/app/graph/nodes/critic.py`

@@ -1,13 +1,21 @@
 "use client";
 
-import { useState } from "react";
-import { Send, Mic, Stethoscope } from "lucide-react";
+import { useState, useRef, useEffect } from "react";
+import { Send, Mic, Stethoscope, BookOpen, Shield, ArrowLeft } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
+import ReactMarkdown from "react-markdown";
+import Link from "next/link";
+
+interface Source {
+  title: string;
+  score: number;
+  snippet: string;
+}
 
 interface Message {
   id: string;
@@ -15,16 +23,32 @@ interface Message {
   content: string;
   timestamp: Date;
   confidence?: string;
-  sources?: { title: string; page: number }[];
+  sources?: Source[];
+  criticAttempts?: number;
+  auditCount?: number;
 }
+
+const CONFIDENCE_STYLES: Record<string, { bg: string; text: string; label: string }> = {
+  high: { bg: "bg-emerald-100 border-emerald-300", text: "text-emerald-800", label: "Yuksek Guven" },
+  medium: { bg: "bg-amber-100 border-amber-300", text: "text-amber-800", label: "Orta Guven" },
+  low: { bg: "bg-orange-100 border-orange-300", text: "text-orange-800", label: "Dusuk Guven" },
+  insufficient: { bg: "bg-red-100 border-red-300", text: "text-red-800", label: "Yetersiz Kanit" },
+};
 
 export default function VetDashboard() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [messages, isLoading]);
 
   const handleSend = async () => {
-    if (!input.trim()) return;
+    if (!input.trim() || isLoading) return;
 
     const userMsg: Message = {
       id: Date.now().toString(),
@@ -34,10 +58,10 @@ export default function VetDashboard() {
     };
 
     setMessages((prev) => [...prev, userMsg]);
+    const text = input;
     setInput("");
     setIsLoading(true);
 
-    // TODO (Faz 3): LangGraph SSE streaming entegrasyonu
     try {
       const res = await fetch(
         `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/api/v1/chat`,
@@ -45,7 +69,7 @@ export default function VetDashboard() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            message: input,
+            message: text,
             user_role: "veterinarian",
             input_source: "text",
           }),
@@ -60,6 +84,8 @@ export default function VetDashboard() {
         timestamp: new Date(),
         confidence: data.evidence_confidence,
         sources: data.sources,
+        criticAttempts: data.critic_attempts,
+        auditCount: data.audit_entry_count,
       };
       setMessages((prev) => [...prev, assistantMsg]);
     } catch {
@@ -68,6 +94,7 @@ export default function VetDashboard() {
         role: "assistant",
         content: "Backend baglantisi kurulamadi. Sunucunun calistigini kontrol edin.",
         timestamp: new Date(),
+        confidence: "insufficient",
       };
       setMessages((prev) => [...prev, errorMsg]);
     } finally {
@@ -77,9 +104,12 @@ export default function VetDashboard() {
 
   return (
     <div className="flex h-screen bg-background">
-      {/* Left Panel — Animal Profile */}
+      {/* Left Panel — Sidebar */}
       <aside className="w-72 border-r border-border bg-muted/30 p-4 flex flex-col gap-4">
         <div className="flex items-center gap-2 mb-2">
+          <Link href="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
+            <ArrowLeft className="w-4 h-4 text-muted-foreground" />
+          </Link>
           <Stethoscope className="w-5 h-5 text-paytar-green" />
           <h2 className="font-semibold text-paytar-green-dark">Veteriner Modu</h2>
         </div>
@@ -122,8 +152,14 @@ export default function VetDashboard() {
             </div>
             <div className="flex justify-between items-center">
               <span className="text-muted-foreground">LangGraph:</span>
-              <Badge variant="outline" className="text-xs">
-                Faz 3
+              <Badge variant="outline" className="text-xs bg-emerald-50 text-emerald-700 border-emerald-200">
+                Calisiyor
+              </Badge>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-muted-foreground">RAG:</span>
+              <Badge variant="outline" className="text-xs bg-emerald-50 text-emerald-700 border-emerald-200">
+                20 chunk
               </Badge>
             </div>
           </CardContent>
@@ -132,8 +168,7 @@ export default function VetDashboard() {
 
       {/* Center Panel — Chat Feed */}
       <main className="flex-1 flex flex-col">
-        {/* Chat Messages */}
-        <ScrollArea className="flex-1 p-6">
+        <div ref={scrollRef} className="flex-1 overflow-y-auto p-6">
           {messages.length === 0 ? (
             <div className="flex items-center justify-center h-full">
               <div className="text-center">
@@ -157,27 +192,57 @@ export default function VetDashboard() {
                   className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
                 >
                   <div
-                    className={`max-w-[80%] rounded-2xl px-4 py-3 ${
+                    className={`max-w-[85%] rounded-2xl px-5 py-4 ${
                       msg.role === "user"
                         ? "bg-paytar-green text-white"
                         : "bg-muted border border-border"
                     }`}
                   >
-                    <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+                    {msg.role === "assistant" ? (
+                      <div className="prose prose-sm max-w-none dark:prose-invert prose-headings:text-paytar-green-dark prose-strong:text-foreground prose-li:text-foreground">
+                        <ReactMarkdown>{msg.content}</ReactMarkdown>
+                      </div>
+                    ) : (
+                      <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+                    )}
+
+                    {/* Confidence + Metadata Badges */}
                     {msg.confidence && (
-                      <div className="mt-2 flex gap-2">
+                      <div className="mt-3 pt-3 border-t border-border/50 flex flex-wrap gap-2">
                         <Badge
                           variant="outline"
-                          className={`text-xs ${
-                            msg.confidence === "high"
-                              ? "bg-green-100 text-green-800 border-green-300"
-                              : msg.confidence === "medium"
-                              ? "bg-yellow-100 text-yellow-800 border-yellow-300"
-                              : "bg-red-100 text-red-800 border-red-300"
-                          }`}
+                          className={`text-xs ${CONFIDENCE_STYLES[msg.confidence]?.bg || ""} ${CONFIDENCE_STYLES[msg.confidence]?.text || ""}`}
                         >
-                          Guven: {msg.confidence}
+                          <Shield className="w-3 h-3 mr-1" />
+                          {CONFIDENCE_STYLES[msg.confidence]?.label || msg.confidence}
                         </Badge>
+                        {msg.criticAttempts !== undefined && msg.criticAttempts > 0 && (
+                          <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700 border-blue-200">
+                            {msg.criticAttempts} Critic retry
+                          </Badge>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Source Cards */}
+                    {msg.sources && msg.sources.length > 0 && (
+                      <div className="mt-3 space-y-2">
+                        {msg.sources.map((src, i) => (
+                          <div
+                            key={i}
+                            className="flex items-start gap-2 p-2 rounded-lg bg-background/60 border border-border/50"
+                          >
+                            <BookOpen className="w-4 h-4 text-paytar-green mt-0.5 flex-shrink-0" />
+                            <div className="min-w-0">
+                              <p className="text-xs font-medium text-foreground truncate">
+                                {src.title}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                Skor: {src.score.toFixed(2)}
+                              </p>
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     )}
                   </div>
@@ -185,18 +250,21 @@ export default function VetDashboard() {
               ))}
               {isLoading && (
                 <div className="flex justify-start">
-                  <div className="bg-muted border border-border rounded-2xl px-4 py-3">
-                    <div className="flex gap-1">
-                      <span className="w-2 h-2 bg-paytar-green/40 rounded-full animate-bounce" />
-                      <span className="w-2 h-2 bg-paytar-green/40 rounded-full animate-bounce [animation-delay:0.15s]" />
-                      <span className="w-2 h-2 bg-paytar-green/40 rounded-full animate-bounce [animation-delay:0.3s]" />
+                  <div className="bg-muted border border-border rounded-2xl px-5 py-4">
+                    <div className="flex items-center gap-2">
+                      <div className="flex gap-1">
+                        <span className="w-2 h-2 bg-paytar-green/40 rounded-full animate-bounce" />
+                        <span className="w-2 h-2 bg-paytar-green/40 rounded-full animate-bounce [animation-delay:0.15s]" />
+                        <span className="w-2 h-2 bg-paytar-green/40 rounded-full animate-bounce [animation-delay:0.3s]" />
+                      </div>
+                      <span className="text-xs text-muted-foreground ml-2">Analiz ediliyor...</span>
                     </div>
                   </div>
                 </div>
               )}
             </div>
           )}
-        </ScrollArea>
+        </div>
 
         {/* Input Area */}
         <div className="border-t border-border p-4 bg-background">

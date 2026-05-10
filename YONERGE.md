@@ -33,8 +33,8 @@ Bu bir chatbot DEĞİLDİR — güvenlik, izlenebilirlik ve kanıta dayalı yan�
 | Backend | FastAPI (Python) | API, AI işleme, ses |
 | AI Orchestration | LangGraph | Multi-agent workflow, state yönetimi |
 | Retrieval | LlamaIndex + Qdrant | RAG pipeline, hybrid search |
-| Primary LLM | Claude Sonnet (Anthropic) | Reasoning, tool calling, critic |
-| Secondary LLM | Llama 3.3 70B (Groq) | Summarization, state compression |
+| Primary LLM | Llama 3.3 70B (Groq) | Reasoning, tool calling, critic, generator |
+| Secondary LLM | Llama 3.3 70B (Groq) | Summarization, query translation |
 | Embeddings | OpenAI text-embedding-3-small | Vektör oluşturma |
 | Vector DB | Qdrant Cloud | Hybrid search (dense + sparse) |
 | PDF Parsing | Docling + TableFormer | Veteriner doküman işleme |
@@ -175,7 +175,7 @@ Kullanıcı Mesajı
 └──────┬──────┘
        ▼
 ┌─────────────┐
-│  Generator  │  ← Claude Sonnet, rol bazlı prompt, tool calling
+│  Generator  │  ← Groq Llama 3.3, rol bazlı prompt, tool calling
 └──────┬──────┘
        ▼
 ┌─────────────┐

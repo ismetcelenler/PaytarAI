@@ -1,17 +1,21 @@
 """
-PaytarAI — Chat Endpoint (SSE Streaming)
+PaytarAI — Chat Endpoint
 
-LangGraph workflow'unu tetikler ve SSE stream olarak yanıt döner.
+LangGraph workflow'unu tetikler ve yanit doner.
 """
 
-from fastapi import APIRouter
+import uuid
+
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
+
+from app.graph.workflow import get_workflow
 
 router = APIRouter(tags=["Chat"])
 
 
 class ChatRequest(BaseModel):
-    """Chat isteği modeli."""
+    """Chat istegi modeli."""
     message: str
     user_role: str  # "veterinarian" | "producer"
     thread_id: str | None = None
@@ -20,41 +24,74 @@ class ChatRequest(BaseModel):
 
 
 class ChatResponse(BaseModel):
-    """Chat yanıt modeli (non-streaming fallback)."""
+    """Chat yanit modeli."""
     response: str
     thread_id: str
     evidence_confidence: str
     sources: list[dict] = []
+    critic_attempts: int = 0
     audit_entry_count: int = 0
+    audit_log: list[dict] = []
 
 
-@router.post("/chat")
+@router.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest):
     """
-    Chat endpoint — LangGraph workflow'unu çalıştırır.
+    Chat endpoint — LangGraph workflow'unu calistirir.
 
-    TODO (Faz 3): LangGraph entegrasyonu
-    - SSE streaming implementasyonu
-    - Rol bazlı prompt injection
-    - Tool calling (dosage, retrieval)
+    Akis: Compress -> Retriever -> Generator -> Critic -> Confidence
     """
-    # Placeholder response — Faz 3'te LangGraph ile değiştirilecek
-    if request.user_role == "veterinarian":
-        placeholder = (
-            "⚕️ [Veteriner Modu] Sistem başlatılıyor. "
-            "LangGraph workflow entegrasyonu Faz 3'te tamamlanacak."
-        )
-    else:
-        placeholder = (
-            "🐄 [Üretici Modu] Sistem başlatılıyor. "
-            "LangGraph workflow entegrasyonu Faz 3'te tamamlanacak.\n\n"
-            "⚠️ Bu bilgi karar desteğidir. Uygulamadan önce mutlaka bir veteriner hekime danışın."
+    request_id = str(uuid.uuid4())[:8]
+    thread_id = request.thread_id or str(uuid.uuid4())[:12]
+
+    # Initial state olustur
+    initial_state = {
+        "messages": [
+            {"role": "user", "content": request.message},
+        ],
+        "retrieved_docs": [],
+        "tool_outputs": {},
+        "thread_memory": {},
+        "critic_attempts": 0,
+        "compression_summary": "",
+        "response_status": "",
+        "user_role": request.user_role,
+        "input_source": request.input_source,
+        "evidence_confidence": "insufficient",
+        "audit_log": [],
+        "draft_response": "",
+        "critic_rejection_reasons": [],
+        "final_response": "",
+        "request_id": request_id,
+        "active_model": "",
+        "retrieval_similarity_score": 0.0,
+        "source_agreement": False,
+        "dosage_triplet_validated": False,
+        "source_trust_level": 5,
+    }
+
+    try:
+        workflow = get_workflow()
+        result = workflow.invoke(initial_state)
+
+        # Kaynak bilgilerini cikart
+        sources = []
+        for doc in result.get("retrieved_docs", [])[:3]:
+            sources.append({
+                "title": doc["metadata"].get("source_title", ""),
+                "score": round(doc["score"], 4),
+                "snippet": doc["text"][:200],
+            })
+
+        return ChatResponse(
+            response=result.get("final_response", result.get("draft_response", "Yanit uretilemedi.")),
+            thread_id=thread_id,
+            evidence_confidence=result.get("evidence_confidence", "insufficient"),
+            sources=sources,
+            critic_attempts=result.get("critic_attempts", 0),
+            audit_entry_count=len(result.get("audit_log", [])),
+            audit_log=result.get("audit_log", []),
         )
 
-    return ChatResponse(
-        response=placeholder,
-        thread_id=request.thread_id or "temp-thread-001",
-        evidence_confidence="insufficient",
-        sources=[],
-        audit_entry_count=0,
-    )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Workflow hatasi: {str(e)}")

@@ -8,6 +8,7 @@
 .env.local
 .env.production
 .env.*.local
+api keys.txt
 
 # ----- Python -----
 __pycache__/
@@ -63,6 +64,11 @@ next-env.d.ts
 backend/data/documents/
 backend/data/manual_review/
 *.pdf
+
+# ----- Database -----
+*.db
+*.sqlite3
+paytar.db
 
 # ----- IDE -----
 .vscode/

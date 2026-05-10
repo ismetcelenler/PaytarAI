@@ -1,11 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Send, Mic, Wheat, ArrowLeft } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import ReactMarkdown from "react-markdown";
+import Link from "next/link";
 
 /* AI-PROMPT.md Section 5.1 — Semptom Kategorileri */
 const SYMPTOM_CATEGORIES = [
@@ -24,6 +26,7 @@ interface Message {
   role: "user" | "assistant";
   content: string;
   timestamp: Date;
+  confidence?: string;
 }
 
 export default function ProducerDashboard() {
@@ -32,6 +35,13 @@ export default function ProducerDashboard() {
   const [isLoading, setIsLoading] = useState(false);
   const [showSymptomGuide, setShowSymptomGuide] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [messages, isLoading]);
 
   const handleSymptomSelect = (categoryId: string, example: string) => {
     const cat = SYMPTOM_CATEGORIES.find((c) => c.id === categoryId);
@@ -71,6 +81,7 @@ export default function ProducerDashboard() {
         role: "assistant",
         content: data.response,
         timestamp: new Date(),
+        confidence: data.evidence_confidence,
       };
       setMessages((prev) => [...prev, assistantMsg]);
     } catch {
@@ -87,7 +98,7 @@ export default function ProducerDashboard() {
   };
 
   const handleSend = () => {
-    if (!input.trim()) return;
+    if (!input.trim() || isLoading) return;
 
     const userMsg: Message = {
       id: Date.now().toString(),
@@ -98,6 +109,7 @@ export default function ProducerDashboard() {
     setMessages((prev) => [...prev, userMsg]);
     const text = input;
     setInput("");
+    if (showSymptomGuide) setShowSymptomGuide(false);
     sendMessage(text);
   };
 
@@ -105,6 +117,9 @@ export default function ProducerDashboard() {
     <div className="flex flex-col h-screen bg-background">
       {/* Header */}
       <header className="border-b border-border px-4 py-3 flex items-center gap-3 bg-paytar-green">
+        <Link href="/" className="text-white hover:opacity-80 transition-opacity">
+          <ArrowLeft className="w-5 h-5" />
+        </Link>
         <Wheat className="w-6 h-6 text-white" />
         <h1 className="text-lg font-semibold text-white">PaytarAI</h1>
         <Badge className="bg-white/20 text-white border-white/30 text-xs">
@@ -120,7 +135,6 @@ export default function ProducerDashboard() {
               setSelectedCategory(null);
             }}
           >
-            <ArrowLeft className="w-4 h-4 mr-1" />
             Semptom Rehberi
           </Button>
         )}
@@ -129,7 +143,7 @@ export default function ProducerDashboard() {
       {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {showSymptomGuide ? (
-          /* Symptom Guide — AI-PROMPT.md Section 5.1 */
+          /* Symptom Guide */
           <ScrollArea className="flex-1 p-6">
             <div className="max-w-lg mx-auto">
               <h2 className="text-lg font-medium text-paytar-green-dark mb-2">
@@ -193,7 +207,7 @@ export default function ProducerDashboard() {
           </ScrollArea>
         ) : (
           /* Chat Feed */
-          <ScrollArea className="flex-1 p-6">
+          <div ref={scrollRef} className="flex-1 overflow-y-auto p-6">
             <div className="space-y-4 max-w-lg mx-auto">
               {messages.map((msg) => (
                 <div
@@ -209,23 +223,32 @@ export default function ProducerDashboard() {
                         : "bg-muted border border-border"
                     }`}
                   >
-                    <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+                    {msg.role === "assistant" ? (
+                      <div className="prose prose-sm max-w-none dark:prose-invert">
+                        <ReactMarkdown>{msg.content}</ReactMarkdown>
+                      </div>
+                    ) : (
+                      <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+                    )}
                   </div>
                 </div>
               ))}
               {isLoading && (
                 <div className="flex justify-start">
                   <div className="bg-muted border border-border rounded-2xl px-4 py-3">
-                    <div className="flex gap-1">
-                      <span className="w-2 h-2 bg-paytar-green/40 rounded-full animate-bounce" />
-                      <span className="w-2 h-2 bg-paytar-green/40 rounded-full animate-bounce [animation-delay:0.15s]" />
-                      <span className="w-2 h-2 bg-paytar-green/40 rounded-full animate-bounce [animation-delay:0.3s]" />
+                    <div className="flex items-center gap-2">
+                      <div className="flex gap-1">
+                        <span className="w-2 h-2 bg-paytar-green/40 rounded-full animate-bounce" />
+                        <span className="w-2 h-2 bg-paytar-green/40 rounded-full animate-bounce [animation-delay:0.15s]" />
+                        <span className="w-2 h-2 bg-paytar-green/40 rounded-full animate-bounce [animation-delay:0.3s]" />
+                      </div>
+                      <span className="text-xs text-muted-foreground ml-2">Dusunuyor...</span>
                     </div>
                   </div>
                 </div>
               )}
             </div>
-          </ScrollArea>
+          </div>
         )}
 
         {/* Input Area (always visible) */}

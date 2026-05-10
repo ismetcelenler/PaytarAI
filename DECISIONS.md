@@ -154,4 +154,123 @@ Ancak AssemblyAI ek bir API key, ek maliyet ve ek karmasiklik getiriyordu.
 
 ---
 
-_Bu dosya proje boyunca guncellenir. Yeni kararlar kronolojik sirayla eklenir._
+## ADR-008: STT Provider — OpenAI Whisper (Groq'a Gecis Opsiyonu)
+
+**Tarih:** 2026-05-10
+**Durum:** Kabul Edildi
+
+**Baglam:** Sesli komut transkripsiyonu icin STT provider secimi gerekiyordu.
+
+**Karar:**
+- Baslangicta OpenAI Whisper Large V3 kullanilacak
+- Ileride Groq'a gecis opsiyonu acik tutulacak (Groq ucretsiz Whisper sunuyor)
+- Embedding her durumda OpenAI'da kalacak (text-embedding-3-small)
+
+**Gerekcesi:**
+- OpenAI Whisper zaten bagimlilikta var (embedding icin OpenAI client kullaniliyor)
+- Groq'un ucretsiz Whisper tier'i daha sonra maliyet optimizasyonu icin degerlendirilecek
+- Embedding modeli degistirmek tum vektorlerin yeniden olusturulmasini gerektirir, bu yuzden sabit kalacak
+
+---
+
+## ADR-009: Dual Language Search — Cift Dil Arama
+
+**Tarih:** 2026-05-10
+**Durum:** Kabul Edildi
+
+**Baglam:** Veteriner kaynaklar hem Ingilizce (Rebhun's vb.) hem Turkce olabilir.
+Turkce sorgu ile Ingilizce kaynak arasinda embedding similarity dusuyor (0.46 vs 0.65+).
+Bu dusuk skor yanlisilkla "Dusuk Guven" olarak yansiyordu.
+
+**Karar:**
+- Retriever node'da "dual query" stratejisi uygulanacak
+- Kullanici sorusu Groq/Llama ile diger dile cevrilecek (ucretsiz)
+- Hem orijinal hem cevrilmis sorgu ile Qdrant'ta arama yapilacak
+- Sonuclar skor bazinda birlestirilecek
+- Chunk metadata'sina `language` field'i eklendi
+
+**Gerekcesi:**
+- Groq ucretsiz oldugu icin ek maliyet yok
+- Her iki dildeki kaynaklar da yuksek skorla bulunabilir
+- Turkce kaynak eklendiginde sistem otomatik olarak onu da kullanir
+
+**Dosya(lar):**
+- `backend/app/rag/query_translator.py` (YENI)
+- `backend/app/graph/nodes/retriever.py` (guncellendi)
+- `backend/app/rag/pipeline.py` (language metadata eklendi)
+
+---
+
+## ADR-010: Generator LLM — Claude Sonnet 4 → Groq Llama 3.3 70B
+
+**Tarih:** 2026-05-10
+**Durum:** Kabul Edildi
+
+**Bağlam:** Generator node Claude Sonnet 4 kullanıyordu. Birkaç test sorguda bile ~$0.50 harcandı.
+Critic retry'lar maliyeti 3x artırıyordu (her red = yeni Claude çağrısı).
+
+**Karar:**
+- Generator tamamen Groq Llama 3.3 70B'ye taşındı
+- Claude Sonnet 4 hiçbir node'da kullanılmıyor
+- Tüm LLM çağrıları (compress, translate, generate) Groq üzerinden
+
+**Gerekçe:**
+- $0 maliyet (Groq ücretsiz tier)
+- Generator zaten kaynak metni formatlamak için kullanılıyor — yaratıcı düşünce gerektirmiyor
+- Groq latency avantajı (~3sn vs ~8sn)
+- Dezavantaj: 100K token/gün limiti (günde ~20 sorgu, retry olmadan)
+
+**Dosya(lar):** `backend/app/graph/nodes/generator.py`
+
+---
+
+## ADR-011: Pipeline Text Cleanup — Görsel Placeholder Temizleme
+
+**Tarih:** 2026-05-10
+**Durum:** Kabul Edildi
+
+**Bağlam:** Docling PDF parse sonucunda `<!-- image -->` placeholder'ları metinde kalıyordu.
+Bu placeholder'lar chunk'larda gereksiz yer kaplıyor ve embedding kalitesini düşürüyordu.
+20 chunk'tan 6'sında toplam 13 adet görsel placeholder tespit edildi.
+
+**Karar:**
+- Pipeline'a chunking öncesi `_clean_parsed_text()` adımı eklendi
+- `<!-- image -->` tagları siliniyor
+- Boş markdown linkleri (`[]()`) temizleniyor
+- 3+ ardışık boş satır 2'ye düşürülüyor
+
+**Gerekçe:**
+- Docling görsellerin OCR'ını yapamıyor (RapidOCR Çince optimize)
+- Görsellerin alt yazıları/açıklamaları zaten metin olarak mevcut — bilgi kaybı yok
+- İleride vision model ile görsel açıklaması eklenebilir (GPT-4V vb.)
+
+**Dosya(lar):** `backend/app/rag/pipeline.py`
+
+---
+
+## ADR-012: Critic Hallucination Check — Toleranslı Sayısal Karşılaştırma
+
+**Tarih:** 2026-05-10
+**Durum:** Kabul Edildi
+
+**Bağlam:** Critic'in halüsinasyon kontrolü sayısal değerleri birebir regex eşleşmesiyle karşılaştırıyordu.
+Format farkları (ör. kaynak "500-mL" vs yanıt "500 ml") sahte alarm üretiyordu.
+Her sorguda 2 gereksiz red → 3x LLM çağrısı → maliyet ve süre artışı.
+
+**Karar:**
+- Regex tabanlı birebir eşleşme yerine normalize edilmiş sayısal karşılaştırma
+- Sayılar birimlerinden bağımsız olarak çıkarılıyor
+- %10 tolerans ile eşleşme aranıyor
+- 3'ten fazla doğrulanamayan sayı varsa red
+- Fallback yanıtları (LLM hatası/rate limit) critic'ten muaf tutuldu
+
+**Gerekçe:**
+- Gerçek hataları (22→220 mg/kg) yakalıyor
+- Format farklarını yok sayıyor
+- Fallback durumunda sonsuz retry döngüsünü engelliyor
+
+**Dosya(lar):** `backend/app/graph/nodes/critic.py`
+
+---
+
+_Bu dosya proje boyunca güncellenir. Yeni kararlar kronolojik sırayla eklenir._
