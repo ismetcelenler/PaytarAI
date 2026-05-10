@@ -127,4 +127,31 @@ semantik bütünlük içinde kalmalı. Tablo yapıları daha büyük chunk'larda
 
 ---
 
-_Bu dosya proje boyunca güncellenir. Yeni kararlar kronolojik sırayla eklenir._
+## ADR-007: AssemblyAI Kaldirildi — Whisper-Only STT + Kullanici Duzenleme
+
+**Tarih:** 2026-05-10
+**Durum:** Kabul Edildi
+
+**Baglam:** AI-PROMPT.md'de Whisper primary + AssemblyAI Medical Mode fallback mimarisi tanimlanmisti.
+Ancak AssemblyAI ek bir API key, ek maliyet ve ek karmasiklik getiriyordu.
+
+**Karar:**
+- AssemblyAI entegrasyonu tamamen kaldirildi
+- Ses transkripsiyonu yalnizca Whisper Large V3 ile yapilacak
+- Whisper transkripti otomatik gonderilmeyecek — chat input alanina dusecek
+- Kullanici transkripti gorup duzenledikten sonra gonder butonuna basacak
+
+**Gerekcesi:**
+- Ek provider gereksiz karmasiklik ve maliyet
+- Kullanicinin transkripti gondermeden once duzenleyebilmesi, hatali ilac isimlerini manual duzeltme imkani verir
+- Bu yaklasim AssemblyAI fallback'inden daha guvenilir — insan dogrulama her zaman AI fallback'inden iyidir
+
+**Kaldirilan dosyalar/satirlar:**
+- `pyproject.toml`: `assemblyai>=0.33.0` dependency
+- `config.py`: `assemblyai_api_key` field
+- `.env.example`: `ASSEMBLYAI_API_KEY` satiri
+- `voice.py`: AssemblyAI referanslari
+
+---
+
+_Bu dosya proje boyunca guncellenir. Yeni kararlar kronolojik sirayla eklenir._

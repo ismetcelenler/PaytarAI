@@ -26,9 +26,6 @@ class Settings(BaseSettings):
     # ----- Groq (Llama 3.3 70B) -----
     groq_api_key: str = ""
 
-    # ----- AssemblyAI (Medical Mode Fallback) -----
-    assemblyai_api_key: str = ""
-
     # ----- Qdrant Cloud -----
     qdrant_url: str = ""
     qdrant_api_key: str = ""

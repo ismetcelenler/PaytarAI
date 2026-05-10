@@ -31,9 +31,8 @@ dependencies = [
     # --- Document Parsing ---
     "docling>=2.0.0",
 
-    # --- Voice / STT ---
+    # --- Voice / STT (Whisper only) ---
     "openai>=1.50.0",
-    "assemblyai>=0.33.0",
 
     # --- Data & Validation ---
     "pydantic>=2.9.0",

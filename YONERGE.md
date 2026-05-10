@@ -42,9 +42,8 @@ Bu bir chatbot DEĞİLDİR — güvenlik, izlenebilirlik ve kanıta dayalı yan�
 | UI Components | Shadcn/UI + Radix UI | Component library |
 | Styling | Tailwind CSS | CSS framework |
 | Generative UI | Vercel AI SDK | Tool rendering, streaming |
-| STT Primary | OpenAI Whisper Large V3 | Sesli komut |
-| STT Fallback | AssemblyAI Medical Mode | İlaç ismi doğrulama |
-| TTS | Vercel AI SDK Voice | Yanıt sesli okuma |
+| STT | OpenAI Whisper Large V3 | Sesli komut (transkript input'a duser, kullanici duzenler) |
+| TTS | Vercel AI SDK Voice | Yanit sesli okuma |
 | Database | SQLite | Audit log, session |
 | Deploy | Vercel + Railway | Frontend + Backend |
 
@@ -74,7 +73,7 @@ Bitirme_PaytarAI/
 │   │   │   └── audit.py    ← Audit log
 │   │   ├── rag/            ← RAG pipeline (ingestion, chunking, validation, embeddings, qdrant)
 │   │   ├── tools/          ← Deterministik araçlar (dosage_calculator, drug_lookup)
-│   │   ├── voice/          ← Ses işleme (whisper, assemblyai, drug_matcher)
+│   │   ├── voice/          ← Ses isleme (whisper)
 │   │   └── models/         ← Pydantic data models
 │   ├── data/documents/     ← Veteriner PDF'leri (gitignore'da)
 │   ├── tests/              ← Pytest test suite
@@ -103,7 +102,7 @@ Bitirme_PaytarAI/
 
 ### 4.1 Ön Gereksinimler
 
-- **Python 3.11+**
+- **Python 3.10+**
 - **Node.js 20+** ve **npm**
 - **Git**
 
@@ -118,11 +117,10 @@ cd Bitirme_PaytarAI
 
 ```bash
 cp .env.example .env
-# .env dosyasını açın ve aşağıdaki keyleri doldurun:
+# .env dosyasini acin ve asagidaki keyleri doldurun:
 # - ANTHROPIC_API_KEY
 # - OPENAI_API_KEY
 # - GROQ_API_KEY
-# - ASSEMBLYAI_API_KEY
 # - QDRANT_URL
 # - QDRANT_API_KEY
 ```

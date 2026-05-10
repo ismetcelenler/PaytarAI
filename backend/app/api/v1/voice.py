@@ -1,10 +1,12 @@
 """
 PaytarAI — Voice Transcription Endpoint
 
-Whisper primary + AssemblyAI Medical Mode fallback ile ses transkripsiyon.
+Whisper Large V3 ile ses transkripsiyonu.
+Transkript dogrudan chat input'a duser, kullanici gondermeden once duzenleyebilir.
+AssemblyAI fallback kaldirildi (ADR-007).
 """
 
-from fastapi import APIRouter, UploadFile, File, Form
+from fastapi import APIRouter, UploadFile, File
 
 router = APIRouter(tags=["Voice"])
 
@@ -12,18 +14,17 @@ router = APIRouter(tags=["Voice"])
 @router.post("/voice/transcribe")
 async def transcribe_voice(
     audio: UploadFile = File(...),
-    user_role: str = Form("producer"),
 ):
     """
-    Ses dosyasını metne çevirir.
+    Ses dosyasini Whisper Large V3 ile metne cevirir.
 
-    - Her iki rol için Whisper Large V3 primary
-    - Veteriner rolünde: ilaç ismi eşleşmezse AssemblyAI fallback
+    Transkript frontend'de chat input alanina yazilir.
+    Kullanici metni gorup duzenledikten sonra gondermeden once kontrol edebilir.
 
-    TODO (Faz 4): Whisper + AssemblyAI entegrasyonu
+    TODO (Faz 4): Whisper API entegrasyonu
     """
+    # Placeholder — Faz 4'te gercek Whisper API cagirisi eklenecek
     return {
-        "transcript": "[Ses transkripsiyon Faz 4'te aktif olacak]",
-        "source": "placeholder",
-        "user_role": user_role,
+        "transcript": "[Whisper transkripsiyonu Faz 4'te aktif olacak]",
+        "source": "whisper",
     }
