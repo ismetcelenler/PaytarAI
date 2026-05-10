@@ -1,0 +1,38 @@
+# PaytarAI — Docker Compose (Local Development)
+# Qdrant Cloud kullanıldığı için burada yalnızca backend & frontend tanımlıdır.
+# Qdrant local test istiyorsanız qdrant servisini uncomment edin.
+
+version: "3.9"
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    volumes:
+      - ./backend:/app
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
+    depends_on:
+      - backend
+
+  # --- Qdrant Local (opsiyonel — Cloud kullanıyoruz) ---
+  # qdrant:
+  #   image: qdrant/qdrant:latest
+  #   ports:
+  #     - "6333:6333"
+  #     - "6334:6334"
+  #   volumes:
+  #     - ./qdrant_storage:/qdrant/storage
