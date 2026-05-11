@@ -9,6 +9,12 @@ from typing import AsyncGenerator
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from dotenv import load_dotenv
+import os
+import pathlib
+
+dotenv_path = pathlib.Path(__file__).parent.parent.parent / ".env"
+load_dotenv(dotenv_path=dotenv_path)
 
 from app.config import settings
 from app.api.router import api_router

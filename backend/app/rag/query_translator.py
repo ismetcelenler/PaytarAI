@@ -9,25 +9,22 @@ from langchain_groq import ChatGroq
 from app.config import settings
 
 
-TRANSLATE_PROMPT = """You are a veterinary medicine translator. Translate the following
-veterinary/cattle healthcare query from {source_lang} to {target_lang}.
+ENRICHMENT_PROMPT = """Sen uzman bir veteriner hekimsin. Aşağıdaki kullanıcı sorusunu analiz et ve bu durumla ilgili olası hastalıkları, semptomları ve klinik tedavi terimlerini anahtar kelimeler halinde yaz.
+Hem Türkçe hem de İngilizce (yaygın veteriner terminolojisi) terimleri kullan.
 
-CRITICAL RULES:
-- This is about CATTLE/BOVINE veterinary medicine
-- Translate medical terms accurately using standard veterinary terminology
-- "süt humması" = "milk fever" or "parturient hypocalcemia" (NOT paronychia)
-- "ketozis/ketosis" = "ketosis" or "acetonemia"
-- "şişme/timpani" = "bloat" or "ruminal tympany"
-- "meme iltihabı/mastit" = "mastitis"
-- "ayak hastalığı" = "foot rot" or "digital dermatitis"
-- Output ONLY the translation, nothing else
+Kullanıcı Sorusu: {query}
 
-Query: {query}
+KURALLAR:
+- Cümle kurma. Sadece anahtar kelimeleri virgülle ayırarak yaz.
+- Soru çok kısaysa (örn: "öksürük"), ona eşlik edebilecek diğer hastalıkları/belirtileri de (pnömoni, ateş, solunum) ekle.
 
-Translation:"""
+Örnek Çıktı:
+öksürük, pnömoni, solunum yolu enfeksiyonu, akciğer, ateş, antibiyotik, respiratory disease, pneumonia
+
+Anahtar Kelimeler:"""
 
 
-def translate_query(query: str, target_lang: str = "English") -> str | None:
+def enrich_query(query: str) -> str | None:
     """
     Sorguyu hedef dile cevirir (Groq/Llama ile, ucretsiz).
 
@@ -43,16 +40,12 @@ def translate_query(query: str, target_lang: str = "English") -> str | None:
     try:
         llm = ChatGroq(
             api_key=settings.groq_api_key,
-            model="llama-3.3-70b-versatile",
+            model="openai/gpt-oss-120b",
             temperature=0,
             max_tokens=200,
         )
 
-        prompt = TRANSLATE_PROMPT.format(
-            query=query,
-            target_lang=target_lang,
-            source_lang=source_lang,
-        )
+        prompt = ENRICHMENT_PROMPT.format(query=query)
         response = llm.invoke(prompt)
         translated = response.content.strip()
 

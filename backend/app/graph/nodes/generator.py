@@ -5,6 +5,7 @@ Groq Llama 3.3 70B ile rol bazli yanit uretir (ucretsiz).
 Retrieved docs'u context olarak kullanir.
 """
 
+from langchain_openai import ChatOpenAI
 from langchain_groq import ChatGroq
 from app.config import settings
 from app.graph.prompts import get_system_prompt
@@ -37,11 +38,13 @@ def generator_node(state: dict) -> dict:
     retrieved_docs = state.get("retrieved_docs", [])
     user_role = state.get("user_role", "producer")
 
-    # Son kullanici mesaji
     last_user_msg = ""
     for msg in reversed(messages):
-        if msg.get("role") == "user":
+        if isinstance(msg, dict) and msg.get("role") == "user":
             last_user_msg = msg.get("content", "")
+            break
+        elif hasattr(msg, "type") and msg.type == "human":
+            last_user_msg = msg.content
             break
 
     if not last_user_msg:
@@ -81,9 +84,9 @@ def generator_node(state: dict) -> dict:
     try:
         llm = ChatGroq(
             api_key=settings.groq_api_key,
-            model="llama-3.3-70b-versatile",
+            model="openai/gpt-oss-120b",
             temperature=0.1,
-            max_tokens=2000,
+            max_tokens=1500,
         )
 
         response = llm.invoke([
@@ -92,7 +95,7 @@ def generator_node(state: dict) -> dict:
         ])
 
         state["draft_response"] = response.content
-        state["active_model"] = "llama-3.3-70b-versatile"
+        state["active_model"] = "openai/gpt-oss-120b"
         state["response_status"] = "ok"
 
         audit_log(
@@ -102,6 +105,8 @@ def generator_node(state: dict) -> dict:
         )
 
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         # Fallback — kaynak metni dogrudan sun
         state["draft_response"] = _build_fallback(retrieved_docs, user_role)
         state["response_status"] = "fallback"

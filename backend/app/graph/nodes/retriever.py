@@ -7,16 +7,20 @@ Sonuclari birlestirip en yuksek skorlu olanlari alir.
 
 from app.rag.embeddings import embed_single
 from app.rag.qdrant_store import search
-from app.rag.query_translator import translate_query, detect_language
+from app.rag.query_translator import enrich_query, detect_language
 from app.graph.audit import audit_log
 
 
-def _merge_results(results_a: list[dict], results_b: list[dict], limit: int = 5) -> list[dict]:
-    """Iki arama sonucunu birlestir, duplikatlari kaldir, skora gore sirala."""
+def _merge_results(results_a: list[dict], results_b: list[dict], limit: int = 5, threshold: float = 0.30) -> list[dict]:
+    """Iki arama sonucunu birlestir, duplikatlari kaldir, skora gore sirala ve threshold uygula."""
     seen_texts = set()
     merged = []
 
     for r in results_a + results_b:
+        # Score threshold kontrolu (alakasiz kaynaklari filtrele)
+        if r.get("score", 0) < threshold:
+            continue
+            
         # Ilk 100 karakter ile dedup
         text_key = r["text"][:100]
         if text_key not in seen_texts:
@@ -43,8 +47,12 @@ def retriever_node(state: dict) -> dict:
     # Son kullanici mesajini al
     last_user_msg = ""
     for msg in reversed(messages):
-        if msg.get("role") == "user":
+        print(f"DEBUG MSG TYPE: {type(msg)} | VALUE: {msg}")
+        if isinstance(msg, dict) and msg.get("role") == "user":
             last_user_msg = msg.get("content", "")
+            break
+        elif hasattr(msg, "type") and msg.type == "human":
+            last_user_msg = msg.content
             break
 
     if not last_user_msg:
@@ -63,17 +71,14 @@ def retriever_node(state: dict) -> dict:
         filters=filters,
     )
 
-    # --- 2. Diger dilde arama (Groq ile ceviri, ucretsiz) ---
-    lang = detect_language(last_user_msg)
-    target_lang = "English" if lang == "tr" else "Turkish"
-
-    translated_query = translate_query(last_user_msg, target_lang)
+    # --- 2. Zenginleştirilmiş (Enriched) Arama (Sorgu Genişletme) ---
+    enriched_query = enrich_query(last_user_msg)
     translated_results = []
 
-    if translated_query:
-        translated_vector = embed_single(translated_query)
+    if enriched_query:
+        enriched_vector = embed_single(enriched_query)
         translated_results = search(
-            query_vector=translated_vector,
+            query_vector=enriched_vector,
             limit=5,
             score_threshold=0.25,
             filters=filters,
@@ -82,6 +87,8 @@ def retriever_node(state: dict) -> dict:
     # --- 3. Sonuclari birlestir ---
     merged = _merge_results(original_results, translated_results, limit=5)
 
+    # Sadece en iyi 3 Parent Chunk'i gonder. Aksi halde LLM Token Limit'e takilir.
+    merged = merged[:3]
     state["retrieved_docs"] = merged
 
     # En yuksek similarity score'u kaydet
@@ -101,9 +108,9 @@ def retriever_node(state: dict) -> dict:
         "retrieval_done",
         reason=(
             f"{len(merged)} docs (orig={len(original_results)}, "
-            f"translated={len(translated_results)}), "
+            f"enriched={len(translated_results)}), "
             f"top_score={state['retrieval_similarity_score']:.4f}, "
-            f"query_lang={lang}, translated={'yes' if translated_query else 'no'}"
+            f"enriched={'yes' if enriched_query else 'no'}"
         ),
         source_ids=[r["metadata"].get("source_title", "") for r in merged[:3]],
     )

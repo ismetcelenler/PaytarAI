@@ -194,3 +194,70 @@ def simple_chunk(
         chunks.append("\n\n".join(current_chunk))
 
     return chunks
+
+
+def chunk_by_sentences(text: str, target_words: int, overlap_words: int) -> list[str]:
+    """Cumleleri bozmadan kelime sayisina gore chunking yapar."""
+    sentences = split_into_sentences(text)
+    chunks = []
+    current_chunk = []
+    current_words = 0
+    
+    for sentence in sentences:
+        sentence_words = len(sentence.split())
+        
+        if current_words + sentence_words > target_words and current_chunk:
+            chunks.append(" ".join(current_chunk))
+            
+            # Overlap olustur
+            overlap_chunk = []
+            overlap_count = 0
+            for s in reversed(current_chunk):
+                s_words = len(s.split())
+                if overlap_count + s_words <= overlap_words:
+                    overlap_chunk.insert(0, s)
+                    overlap_count += s_words
+                else:
+                    if not overlap_chunk: # En az 1 cumle kalsin
+                        overlap_chunk.insert(0, s)
+                        overlap_count += s_words
+                    break
+            
+            current_chunk = overlap_chunk
+            current_words = overlap_count
+            
+        current_chunk.append(sentence)
+        current_words += sentence_words
+        
+    if current_chunk:
+        chunks.append(" ".join(current_chunk))
+        
+    return chunks
+
+
+def parent_child_chunk(
+    text: str,
+    parent_words: int = 400,
+    parent_overlap: int = 50,
+    child_words: int = 50,
+    child_overlap: int = 10
+) -> list[dict]:
+    """
+    Qdrant Payload stratejisine uygun Parent-Child chunking.
+    Once metni Ebeveynlere boler, sonra her Ebeveyni Cocuklara boler.
+    
+    Returns:
+        [{"child_text": "...", "parent_text": "..."}, ...]
+    """
+    results = []
+    parents = chunk_by_sentences(text, parent_words, parent_overlap)
+    
+    for parent_text in parents:
+        children = chunk_by_sentences(parent_text, child_words, child_overlap)
+        for child_text in children:
+            results.append({
+                "child_text": child_text,
+                "parent_text": parent_text
+            })
+            
+    return results

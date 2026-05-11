@@ -22,6 +22,7 @@ def get_converter() -> DocumentConverter:
     global _converter
     if _converter is None:
         pipeline_options = PdfPipelineOptions(do_table_structure=True)
+        pipeline_options.do_ocr = False  # OOM/std::bad_alloc onlemek icin OCR kapali
         pipeline_options.table_structure_options.mode = TableFormerMode.ACCURATE
 
         _converter = DocumentConverter(

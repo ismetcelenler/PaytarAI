@@ -93,14 +93,18 @@ def _check_role_compliance(draft: str, user_role: str) -> str | None:
 
 def _check_emergency_flag(draft: str, docs: list[dict]) -> str | None:
     """Acil durumlar icin uyari kontrolu."""
+    # Sadece gercekten hayati tehlike belirten terimler
     emergency_keywords = [
-        "fatal", "olum", "death", "emergency", "acil",
-        "convulsion", "collapse", "recumbent", "yere yat",
+        "fatal", "death", "emergency", "life-threatening",
     ]
 
     source_text = " ".join(d["text"] for d in docs).lower()
     source_has_emergency = any(kw in source_text for kw in emergency_keywords)
-    draft_has_warning = "acil" in draft.lower() or "hemen veteriner" in draft.lower()
+
+    # Yanittaki acil uyari varyantlari
+    draft_lower = draft.lower()
+    warning_markers = ["acil", "hemen veteriner", "hayati tehlike", "tehlike", "uyarı"]
+    draft_has_warning = any(m in draft_lower for m in warning_markers)
 
     if source_has_emergency and not draft_has_warning:
         return "Kaynaklar acil/tehlikeli durum belirtiyor ancak yanit acil uyari icermiyor. ACİL uyarisi ekle."

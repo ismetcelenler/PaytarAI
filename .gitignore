@@ -84,3 +84,11 @@ desktop.ini
 
 # ----- Docker -----
 qdrant_storage/
+
+# ----- Ad-hoc / Debug Tests -----
+backend/tests/test_hex.py
+backend/tests/test_print_oks.py
+backend/tests/test_db_scan.py
+backend/tests/extract_pdf.py
+backend/tests/qdrant_output.txt
+backend/tests/test_oksüruk*

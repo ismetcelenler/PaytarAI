@@ -8,7 +8,7 @@ Tam pipeline'i tek cagriyla calistirir.
 from pathlib import Path
 
 from app.rag.ingestion import parse_pdf, parse_all_documents
-from app.rag.chunking import semantic_chunk, simple_chunk
+from app.rag.chunking import semantic_chunk, simple_chunk, parent_child_chunk
 from app.rag.embeddings import embed_texts
 from app.rag.qdrant_store import ensure_collection, upsert_chunks, get_collection_info
 from app.rag.query_translator import detect_language
@@ -18,6 +18,7 @@ def ingest_pdf(
     pdf_path: str | Path,
     source_title: str | None = None,
     use_semantic: bool = True,
+    use_parent_child: bool = False,
 ) -> dict:
     """
     Tek bir PDF'i parse edip Qdrant'a yukler.
@@ -46,8 +47,18 @@ def ingest_pdf(
     print(f"\n[Pipeline] Metin temizlendi ({removed} karakter cikarildi)")
 
     # 3. Chunk
-    print(f"\n[Pipeline] Chunking basladi (mod: {'semantic' if use_semantic else 'simple'})...")
-    if use_semantic:
+    print(f"\n[Pipeline] Chunking basladi (mod: {'parent-child' if use_parent_child else ('semantic' if use_semantic else 'simple')})...")
+    pc_chunks = []
+    if use_parent_child:
+        pc_chunks = parent_child_chunk(
+            text=cleaned_text,
+            parent_words=400,
+            parent_overlap=50,
+            child_words=50,
+            child_overlap=10
+        )
+        chunks = [item["child_text"] for item in pc_chunks]
+    elif use_semantic:
         chunks = semantic_chunk(
             text=cleaned_text,
             embed_fn=embed_texts,
@@ -76,16 +87,18 @@ def ingest_pdf(
     # 4. Metadata (dil tespiti dahil)
     title = source_title or parsed["name"]
     doc_lang = detect_language(chunks[0] if chunks else "")
-    metadata_list = [
-        {
+    metadata_list = []
+    for i, _ in enumerate(chunks):
+        meta = {
             "source_title": title,
             "source_file": pdf_path.name,
             "total_pages": parsed["pages"],
             "chunk_total": len(chunks),
             "language": doc_lang,
         }
-        for _ in chunks
-    ]
+        if use_parent_child and pc_chunks:
+            meta["parent_text"] = pc_chunks[i]["parent_text"]
+        metadata_list.append(meta)
 
     # 5. Qdrant upsert
     print(f"\n[Pipeline] Qdrant'a yukleniyor...")

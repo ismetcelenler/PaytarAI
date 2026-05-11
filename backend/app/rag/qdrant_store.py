@@ -159,9 +159,9 @@ def search(
     return [
         {
             "score": point.score,
-            "text": point.payload.get("text", ""),
+            "text": point.payload.get("parent_text", point.payload.get("text", "")),
             "metadata": {
-                k: v for k, v in point.payload.items() if k != "text"
+                k: v for k, v in point.payload.items() if k not in ("text", "parent_text")
             },
         }
         for point in results.points

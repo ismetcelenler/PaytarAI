@@ -18,7 +18,11 @@ def get_openai_client() -> OpenAI:
     """OpenAI client singleton."""
     global _client
     if _client is None:
-        _client = OpenAI(api_key=settings.openai_api_key)
+        key = settings.openai_api_key
+        if not key:
+            import os
+            key = os.environ.get("OPENAI_API_KEY", "")
+        _client = OpenAI(api_key=key)
     return _client
 
 
@@ -40,7 +44,6 @@ def embed_texts(texts: list[str]) -> list[list[float]]:
         model=EMBEDDING_MODEL,
         input=texts,
     )
-
     return [item.embedding for item in response.data]
 
 
