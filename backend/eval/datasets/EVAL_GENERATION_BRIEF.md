@@ -29,6 +29,71 @@ retrieval kullanılıyor (BGE-M3 multilingual embedder).
 
 Aşağıdaki kategori dağılımına ve kurallara göre **50 adet eval sorusu** üret.
 
+---
+
+## GENEL YAZIM KURALI (KRİTİK)
+
+PaytarAI bir **mobil uygulama** — herkesin telefonundan kullanılıyor. Hiçbir
+kullanıcı makale yazmaz. **Yazım hataları gerçek, ölçülü ve sahaya uygun**
+olmalı. Üç kademe var.
+
+**ÖNEMLİ — Stratified Evaluation:** Aynı kategoride farklı yazım stillerinden
+sorular olacak ki sistemin **yazım gürültüsüne dayanıklılığı ölçülebilsin**.
+Her case YAML'da `writing_style` alanı taşımalı: `clean`, `mid`, ya da `broken`.
+
+### writing_style tanımları:
+
+- **clean**: Düzgün Türkçe, noktalama tam (nokta, virgül), büyük harf cümle
+  başında, formal yapı. *"İneğimin sütü düştü ve halsiz görünüyor."*
+- **mid**: Gevşek noktalama (cümle sonu bazen yok), küçük harf cümle başı
+  olabilir, 1-2 TR karakter kaçırma. *"ineğimin sütü düştü halsiz duruyor"*
+- **broken**: Saha dili, noktalama yok, hep küçük harf, TR karakter sık kaçma,
+  kelime yutma, telgraf stili. *"ineim sutu dustu halsiz duryor"*
+
+### Üç kademe yazım uygulaması (rolüne göre):
+
+### Tier 1 — Tam saha dili (~%70-80 hatalı yazım)
+
+**Kategoriler:** producer_natural, emergency (üretici rolü), management,
+out_of_scope (üretici rolü), edge_cases, multi_turn (kullanıcı turn'leri)
+
+**Kurallar:**
+- Noktalama **çok az veya yok** (12+ sorunun en fazla 2-3'ünde olabilir)
+- Tüm harfler **küçük** — cümle başı bile küçük
+- Türkçe karakter kaçırma **sık** (~%70 sorguda): ı→i, ş→s, ğ→g, ç→c, ö→o, ü→u
+- Kelime yutma normal: "yapayım" → "yapym", "kalkamıyor" → "kalkamio"
+- Virgülsüz birleşik cümle: "ineim sutu az gelio yatkin duruyor ne yapsam"
+- Acilde telgraf stili: "inek dustu kalkmior yardim"
+
+### Tier 2 — Yarı saha dili (~%30 gevşek)
+
+**Kategoriler:** vet_technical, emergency (veteriner rolü)
+
+**Kurallar:**
+- Sözcükler **doğru yazılır** — vet eğitimli, "patogenez/endometritis"
+  yazımını bilir
+- **Noktalama gevşek**: cümle sonu nokta nadir, virgül atlanır, soru işareti
+  bazen var bazen yok
+- **Büyük harf esnek**: cümle başı küçük harfle de yazılabilir
+- **Tam cümle yerine sorgu stili**: "ketozis patogenezi ve tedavisi nedir"
+- Çok formal/uzun cümleden kaçın
+
+**Doğru örnek (vet):**
+- ✓ "süt humması patogenezi nedir kalsiyum homeostazı mekanizması"
+- ✗ "Süt hummasının patogenezini anlatır mısınız, özellikle doğum öncesi ve sonrası kalsiyum homeostazı mekanizması açısından?" — çok formal
+
+### Tier 3 — Olduğu gibi bırak
+
+**Kategoriler:** stress_test, multi_turn assistant turn'leri
+
+**Sebep:**
+- Stress test: saldırgan bilinçli yazar (prompt injection ciddi tonda), ya da
+  gibberish zaten anlamsız
+- Multi_turn assistant: sistemin gerçek yanıtını simüle ediyor — sistem temiz
+  Türkçe çıktı veriyor, o yüzden assistant turn'ü temiz olmalı
+
+---
+
 Her soru için şu alanları doldur:
 
 ```yaml
@@ -36,6 +101,7 @@ Her soru için şu alanları doldur:
   question: "<gerçek kullanıcı sorgusu>"
   user_role: "producer" | "veterinarian"
   category: "<kategori>"
+  writing_style: "clean" | "mid" | "broken"   # ZORUNLU — aşağıdaki dağılıma uy
   expected_facts:
     - "kavram_a|sinonim_1|sinonim_2"   # | ile OR varyantlar
     - "kavram_b|..."
@@ -50,6 +116,23 @@ Her soru için şu alanları doldur:
   # expect_retrieval_fail: true        # SADECE out_of_scope'ta
 ```
 
+### writing_style DAĞILIMI (toplam 50)
+
+| Kategori | clean | mid | broken | TOPLAM |
+|---|---|---|---|---|
+| producer_natural | 4 | 4 | 4 | 12 |
+| vet_technical | 5 | 5 | 0 | 10 |
+| emergency | 2 | 2 | 4 | 8 |
+| management | 2 | 1 | 2 | 5 |
+| out_of_scope | 2 | 1 | 2 | 5 |
+| edge_cases | 1 | 1 | 3 | 5 |
+| stress_test | 3 (kuralsız ama yine de doldur) | 0 | 0 | 3 |
+| multi_turn | 1 | 0 | 1 | 2 |
+| **TOPLAM** | **20** | **14** | **16** | **50** |
+
+**Not:** Vet kategorisinde `broken` YOK çünkü vet hekim eğitimli; sözcükleri
+doğru yazar (Tier 2 = clean/mid arası).
+
 ---
 
 ## KATEGORİ DAĞILIMI (toplam 50)
@@ -57,9 +140,33 @@ Her soru için şu alanları doldur:
 ### 1. **producer_natural** — 12 soru
 
 **Persona:** Akıllı telefon kullanan, hayvanını tanıyan ama tıbbi terminoloji
-bilmeyen üretici. Günlük Türkçe yazıyor. ~30%'unda doğal yazım hataları
-(kasıtlı abartı değil, gerçek hayatta olan: noktalama eksik, Türkçe karakter
-kaçırma, "yapym" gibi harf yutma).
+bilmeyen üretici. **WhatsApp dili** yazıyor — makale değil.
+
+**SAHA DİLİ ZORUNLULUKLARI** (sorularda gerçek kullanıcı yazımı):
+
+- **Noktalama tamamen yok ya da çok az** — nokta, virgül, soru işareti çok
+  nadir (12 sorudan en fazla 2-3'ünde olabilir, fazlasında YOK)
+- **Hep küçük harf** — "İneğim" değil "ineim", cümle başı bile küçük
+- **Türkçe karakter kaçırması SIK** (~%70 sorguda):
+  - ı→i, ş→s, ğ→g, ç→c, ö→o, ü→u
+  - "ineğim" → "inegim", "büyükbaş" → "buyukbas", "şişlik" → "sislik"
+- **Kelime yutma normal:** "yapayım" → "yapym", "kalkamıyor" → "kalkamio",
+  "ediyorum" → "edyorum"
+- **Birleşik cümle:** virgülden ayırmadan "ineğim sutu az geliyor yatkın
+  duruyor ne yapsam" gibi
+- **Bazen telgraf stili:** "inek dustu kalkmior", "buzaa ishal yapyo halsiz"
+
+**Tone:** Soru sormak yerine durum anlatma. Çoğu cümle "ineim..", "hayvanim..",
+"buzaa.." gibi başlar.
+
+**Örnek doğru saha-dili soru:**
+- ✓ "ineimin sa memesi sert sicak sut az gelio sarimsi bisey cikior"
+- ✗ "İneğimin sağ memesinden süt az geliyor, sarımsı bir şey çıkıyor, ne olabilir?" — bu makale dili
+
+**12 soruda dağılım:**
+- 6-8 soru: ciddi saha dili (noktalama yok, küçük harf, TR karakter kaçma)
+- 3-4 soru: orta — bazı noktalama var ama TR karakter eksik
+- 1-2 soru: nispeten temiz (yine de büyük harf yok)
 
 **İçerik dağılımı (12 soru):**
 - 2 soru: süt verimi / meme problemleri
@@ -94,8 +201,9 @@ yerine durum anlatma.
 
 ### 2. **vet_technical** — 10 soru
 
-**Persona:** Veteriner hekim, meslektaşına teknik soru soruyor. Düzgün Türkçe,
-tıbbi terim rahat kullanıyor. Yazım hatası **yok**.
+**Persona:** Veteriner hekim, meslektaşına teknik soru soruyor. Tıbbi terim
+rahat kullanıyor. **Tier 2 yazım kuralı:** sözcükler doğru ama noktalama
+gevşek, büyük harf esnek, formal cümle yapısından kaçın.
 
 **İçerik dağılımı (10 soru):**
 - 2 soru: hastalık patogenezi (örn. "süt humması patogenezi", "ketozis mekanizması")
@@ -140,8 +248,13 @@ genelde kısa, telaşlı yazar.
 - 1 soru (vet): nörolojik akut tablo (kas titremesi, koma, hipomagnezemi)
 - 1 soru (vet): septik şok / akut peritonit yönetimi
 
-**Tone:** Üretici: "hemen acil", "ne yapayım", "ölecek gibi". Vet: profesyonel
-ama "acil yardıma ihtiyacım var" tonu.
+**Tone:** Üretici: **panik + telgraf stili**, noktalama yok küçük harf,
+"yardim et", "olecek gibi", "ne yapyim", "hemen", TR karakter kaçma SIK.
+Vet: profesyonel ama "acil yardıma ihtiyacım var" tonu, **temiz Türkçe**.
+
+**Saha dili örnek (üretici acil):**
+- ✓ "inek dogumdan sonra yere yikildi kalkamior yardim edin"
+- ✗ "İneğim doğum sonrası yere yıkıldı, kalkamıyor, ne yapayım?" — fazla makale
 
 **expected_facts (her soruda):**
 - "acil|hemen|emergency|🚨" — acil flag tetiklenmeli
@@ -157,7 +270,8 @@ ama "acil yardıma ihtiyacım var" tonu.
 
 ### 4. **management** — 5 soru
 
-**Persona:** Üretici, işletme verimliliği soruyor. Acil değil, eğitim ihtiyacı.
+**Persona:** Üretici, işletme verimliliği soruyor. Acil değil ama **Tier 1
+saha dili** geçerli — noktalama yok, küçük harf, TR karakter kaçma.
 
 **İçerik dağılımı (5 soru):**
 - 1 soru: kızgınlık tespiti / tohumlama zamanı
@@ -181,7 +295,8 @@ ama "acil yardıma ihtiyacım var" tonu.
 
 ### 5. **out_of_scope** — 5 soru
 
-**Persona:** Karışık (üretici/vet fark etmez). Konu büyükbaş **DIŞINDA**.
+**Persona:** Çoğunlukla üretici (4 soru), 1 soru vet olabilir. Konu büyükbaş
+**DIŞINDA**. **Tier 1 saha dili** üretici sorularda, Tier 2 vet sorusunda.
 
 **İçerik dağılımı (5 soru):**
 - 1 soru: kedi sağlığı
@@ -217,7 +332,8 @@ Sistemi zorlayan girdiler. Persona çoğunlukla üretici.
 - 1 soru: **çoklu birbirinden bağımsız semptom** (3+ farklı sistem)
 - 1 soru: **muğlak/belirsiz** (örn. "hayvanım iyi değil", "bir sorun var")
 
-**Tone:** Doğal kullanıcı.
+**Tone:** Doğal kullanıcı, **saha dili kuralları geçerli** (üretici personası
+için). Noktalama yok, küçük harf, TR karakter kaçma.
 
 **expected_facts:**
 - Sistemin **takip sorusu** sorması beklenir ("kaç gündür", "yaşı kaç",
@@ -273,6 +389,9 @@ mesajı asıl test sorgusudur.
 **İçerik dağılımı (2 soru):**
 - 1 soru: progressive bilgi (önce arka plan, sonra acil belirti)
 - 1 soru: takip sorusu cevabı sonrası
+
+**Saha dili kuralı:** Üretici turn'lerinde **saha dili zorunlu** (noktalama yok,
+küçük harf, TR karakter kaçma). Assistant turn'lerinde temiz Türkçe.
 
 ---
 

@@ -28,13 +28,41 @@ def write_markdown_report(out_path: Path, summary: dict, results: list[dict], da
     if cat:
         lines.append("## Kategori Kirilimi")
         lines.append("")
-        lines.append("| Kategori | N | Fact cov | Forbidden pass | Retrieval |")
-        lines.append("|---|---|---|---|---|")
+        lines.append("| Kategori | N | Fact (LLM) | Forbidden | Retrieval | Top sim |")
+        lines.append("|---|---|---|---|---|---|")
         for name, c in sorted(cat.items()):
             lines.append(
-                f"| {name} | {c['n']} | {c['fact_coverage_avg']:.2f} | "
-                f"{c['forbidden_pass_rate']:.2f} | {c['retrieval_precision_avg']:.2f} |"
+                f"| {name} | {c['n']} | {c.get('fact_coverage_llm_avg', 0):.2f} | "
+                f"{c['forbidden_pass_rate']:.2f} | {c['retrieval_precision_avg']:.2f} | "
+                f"{c.get('top_sim_avg', 0):.2f} |"
             )
+        lines.append("")
+
+    # Writing style kırılımı (stratified evaluation)
+    style = summary.get("by_writing_style", {})
+    if style and any(s != "unknown" for s in style):
+        lines.append("## Yazim Stili Kirilimi (Robustness)")
+        lines.append("")
+        lines.append("| Stil | N | Fact (LLM) | Forbidden | Retrieval | Top sim |")
+        lines.append("|---|---|---|---|---|---|")
+        for st in ("clean", "mid", "broken", "unknown"):
+            if st in style:
+                c = style[st]
+                lines.append(
+                    f"| **{st}** | {c['n']} | {c.get('fact_coverage_llm_avg', 0):.2f} | "
+                    f"{c.get('forbidden_pass_rate', 0):.2f} | {c.get('retrieval_precision_avg', 0):.2f} | "
+                    f"{c.get('top_sim_avg', 0):.2f} |"
+                )
+        gap = summary.get("robustness_gap_clean_vs_broken")
+        if gap is not None:
+            lines.append("")
+            lines.append(f"**Robustness gap (clean - broken):** `{gap:+.3f}`")
+            if abs(gap) < 0.05:
+                lines.append("→ Sistem yazim gurultusune dayanikli (gap < 0.05)")
+            elif gap > 0.15:
+                lines.append("→ Sistem temiz yazimda belirgin daha iyi (gap > 0.15) — embedder/retrieval iyilestirme aday")
+            else:
+                lines.append("→ Orta seviye dayaniklilik")
         lines.append("")
 
     lines.append("## Case Detaylari")
@@ -44,7 +72,8 @@ def write_markdown_report(out_path: Path, summary: dict, results: list[dict], da
         forbidden_ok = "OK" if m["forbidden_check"]["passed"] else "FAIL"
         retrieval_ok = "OK" if m["retrieval_precision"]["score"] >= 0.66 else "ZAYIF"
 
-        lines.append(f"### `{r['id']}` — {r['category']} ({r['user_role']})")
+        style_tag = f" [{r['writing_style']}]" if r.get("writing_style") and r["writing_style"] != "unknown" else ""
+        lines.append(f"### `{r['id']}` — {r['category']} ({r['user_role']}){style_tag}")
         lines.append("")
         lines.append(f"**Soru:** {r['question']}")
         lines.append("")

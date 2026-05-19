@@ -50,10 +50,34 @@ DEFAULT_DATASET = BACKEND_DIR / "eval" / "datasets" / "eval_set.yaml"
 REPORTS_DIR = BACKEND_DIR / "eval" / "reports"
 
 
+def _get_messages_from_case(case: dict) -> list[dict]:
+    """
+    Eval case'inden mesaj listesi cikarir.
+    - Multi-turn: case["messages"] kullanilir (assistant turn'leri dahil)
+    - Single-turn: case["question"] tek user mesaji olarak sarilir
+    """
+    if "messages" in case and case["messages"]:
+        return [
+            {"role": m["role"], "content": m["content"]}
+            for m in case["messages"]
+        ]
+    return [{"role": "user", "content": case["question"]}]
+
+
+def _get_user_question_for_judge(case: dict) -> str:
+    """LLM judge icin asil kullanici sorusunu cikarir (son user turn'u)."""
+    if "messages" in case and case["messages"]:
+        for m in reversed(case["messages"]):
+            if m.get("role") == "user":
+                return m["content"]
+        return ""
+    return case.get("question", "")
+
+
 def _build_initial_state(case: dict) -> dict:
-    """Eval case'inden AgentState'i kurar."""
+    """Eval case'inden AgentState'i kurar (single-turn ve multi-turn)."""
     return {
-        "messages": [{"role": "user", "content": case["question"]}],
+        "messages": _get_messages_from_case(case),
         "retrieved_docs": [],
         "tool_outputs": {},
         "thread_memory": {},
@@ -93,7 +117,8 @@ def run_case(workflow, case: dict) -> dict:
     docs = result.get("retrieved_docs", [])
 
     facts = fact_coverage(response_text, case.get("expected_facts", []))
-    facts_llm = fact_coverage_llm(response_text, case.get("expected_facts", []), case["question"])
+    user_question = _get_user_question_for_judge(case)
+    facts_llm = fact_coverage_llm(response_text, case.get("expected_facts", []), user_question)
     forbidden = must_not_contain(response_text, case.get("must_not_contain", []))
     retrieval = retrieval_precision(
         docs,
@@ -105,8 +130,9 @@ def run_case(workflow, case: dict) -> dict:
     return {
         "id": case["id"],
         "category": case.get("category", ""),
+        "writing_style": case.get("writing_style", "unknown"),
         "user_role": case.get("user_role", "producer"),
-        "question": case["question"],
+        "question": user_question,  # multi-turn icin son user mesaji, single icin tek soru
         "response": response_text,
         "response_status": result.get("response_status", ""),
         "critic_attempts": result.get("critic_attempts", 0),
@@ -137,19 +163,37 @@ def aggregate(results: list[dict]) -> dict:
     avg_latency = sum(r["latency_sec"] for r in results) / n
     errors = sum(1 for r in results if r["error"])
 
+    def _aggregate_subset(items: list[dict]) -> dict:
+        k = len(items)
+        if k == 0:
+            return {"n": 0}
+        return {
+            "n": k,
+            "fact_coverage_avg": round(sum(i["metrics"]["fact_coverage"]["score"] for i in items) / k, 3),
+            "fact_coverage_llm_avg": round(sum(i["metrics"]["fact_coverage_llm"]["score"] for i in items) / k, 3),
+            "forbidden_pass_rate": round(sum(1 for i in items if i["metrics"]["forbidden_check"]["passed"]) / k, 3),
+            "retrieval_precision_avg": round(sum(i["metrics"]["retrieval_precision"]["score"] for i in items) / k, 3),
+            "top_sim_avg": round(sum(i["metrics"]["retrieval_precision"]["top_score"] for i in items) / k, 3),
+        }
+
+    # Kategori bazli
     by_category: dict[str, list[dict]] = {}
     for r in results:
         by_category.setdefault(r["category"], []).append(r)
+    cat_summary = {cat: _aggregate_subset(items) for cat, items in by_category.items()}
 
-    cat_summary = {}
-    for cat, items in by_category.items():
-        k = len(items)
-        cat_summary[cat] = {
-            "n": k,
-            "fact_coverage_avg": round(sum(i["metrics"]["fact_coverage"]["score"] for i in items) / k, 3),
-            "forbidden_pass_rate": round(sum(1 for i in items if i["metrics"]["forbidden_check"]["passed"]) / k, 3),
-            "retrieval_precision_avg": round(sum(i["metrics"]["retrieval_precision"]["score"] for i in items) / k, 3),
-        }
+    # writing_style bazli (stratified evaluation)
+    by_style: dict[str, list[dict]] = {}
+    for r in results:
+        by_style.setdefault(r.get("writing_style", "unknown"), []).append(r)
+    style_summary = {style: _aggregate_subset(items) for style, items in by_style.items()}
+
+    # Robustness gap: clean - broken
+    robustness_gap = None
+    if "clean" in style_summary and "broken" in style_summary:
+        clean_score = style_summary["clean"].get("fact_coverage_llm_avg", 0)
+        broken_score = style_summary["broken"].get("fact_coverage_llm_avg", 0)
+        robustness_gap = round(clean_score - broken_score, 3)
 
     return {
         "n": n,
@@ -161,6 +205,8 @@ def aggregate(results: list[dict]) -> dict:
         "latency_sec_avg": round(avg_latency, 3),
         "errors": errors,
         "by_category": cat_summary,
+        "by_writing_style": style_summary,
+        "robustness_gap_clean_vs_broken": robustness_gap,
     }
 
 
@@ -189,7 +235,8 @@ def main() -> int:
 
     results = []
     for idx, case in enumerate(cases, 1):
-        print(f"\n[{idx}/{len(cases)}] {case['id']} | {case.get('category', '')} | {case['question'][:60]}")
+        q_preview = _get_user_question_for_judge(case)[:60]
+        print(f"\n[{idx}/{len(cases)}] {case['id']} | {case.get('category', '')} | {q_preview}")
         r = run_case(workflow, case)
         results.append(r)
 
@@ -217,6 +264,21 @@ def main() -> int:
           f"retrieval={summary['retrieval_precision_avg']:.3f}  "
           f"top_sim={summary['retrieval_top_score_avg']:.3f}  "
           f"lat={summary['latency_sec_avg']:.1f}s")
+
+    # Writing style stratified kırılım (varsa)
+    style_summary = summary.get("by_writing_style", {})
+    if style_summary and any(s != "unknown" for s in style_summary):
+        print("\nYAZIM STILI KIRILIMI:")
+        for style in ("clean", "mid", "broken", "unknown"):
+            if style in style_summary:
+                s = style_summary[style]
+                print(f"  {style:8s} n={s['n']:>2d}  "
+                      f"fact_llm={s.get('fact_coverage_llm_avg', 0):.3f}  "
+                      f"forbidden={s.get('forbidden_pass_rate', 0):.3f}  "
+                      f"top_sim={s.get('top_sim_avg', 0):.3f}")
+        gap = summary.get("robustness_gap_clean_vs_broken")
+        if gap is not None:
+            print(f"  ROBUSTNESS GAP (clean - broken) = {gap:+.3f}")
 
     REPORTS_DIR.mkdir(parents=True, exist_ok=True)
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
