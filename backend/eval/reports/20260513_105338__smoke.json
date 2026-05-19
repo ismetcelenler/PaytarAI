@@ -1,0 +1,58 @@
+{
+  "summary": {
+    "n": 1,
+    "fact_coverage_avg": 1.0,
+    "forbidden_pass_rate": 1.0,
+    "retrieval_precision_avg": 1.0,
+    "retrieval_top_score_avg": 0.531,
+    "latency_sec_avg": 10.542,
+    "errors": 0,
+    "by_category": {
+      "emergency": {
+        "n": 1,
+        "fact_coverage_avg": 1.0,
+        "forbidden_pass_rate": 1.0,
+        "retrieval_precision_avg": 1.0
+      }
+    }
+  },
+  "results": [
+    {
+      "id": "emergency_01",
+      "category": "emergency",
+      "user_role": "producer",
+      "question": "İneğim doğumdan sonra yere yattı kalkamıyor ne yapayım",
+      "response": "🚨 ACİL: Hemen veteriner çağırın!\n\nDoğum sonrası inek yere yatarak kalkamıyorsa, en olası neden kalsiyum düşüklüğüdür. Doğumda süt üretimi için çok fazla kalsiyum harcanır; kan kalsiyumu yeterince düşerse hayvan ayakta duramaz, halsizleşir ve yere yatar. Bu durum hızlı müdahale gerektirir, aksi takdirde hayvanın durumu kötüleşebilir.\n\nVeteriner gelene kadar şu adımları uygulayabilirsiniz:\n\n- İneği temiz, kuru ve rahat bir yere yatırın; soğuk havada üşümemesi için üzerini örtün. \n- Su ve yemine ulaşabileceği bir konumda bırakın, ama zorla içirmeyin; suyun serin (yaklaşık 10 °C) olması iştahını artırabilir. \n- Sıcaklığını kontrol edin; 40 °C’nin üzerindeyse ateşi yüksek demektir, bu da aciliyetin artığını gösterir. \n- Eğer mümkünse, veterinerin önerdiği şekilde damar yoluyla kalsiyum verilmesi için hazırlık yapın (örneğin, bir damacana temiz suyu yanına koyun).\n\nBu adımlar hayvanın durumunu stabilize etmeye yardımcı olur, ancak kesin tedavi veteriner tarafından yapılmalıdır. Lütfen en kısa sürede bir veterinerle iletişime geçin.\n\n⚠️ Bu bilgi karar desteğidir. Uygulamadan önce mutlaka bir veteriner hekime danışın.",
+      "response_status": "accepted",
+      "critic_attempts": 0,
+      "active_model": "openai/gpt-oss-120b",
+      "evidence_confidence": "high",
+      "latency_sec": 10.542,
+      "metrics": {
+        "fact_coverage": {
+          "matched": [
+            "süt humması|kalsiyum düşüklüğü|hipokalsemi",
+            "veteriner|acil",
+            "kalsiyum|kalsiyum tedavisi"
+          ],
+          "missed": [],
+          "score": 1.0
+        },
+        "forbidden_check": {
+          "violations": [],
+          "passed": true
+        },
+        "retrieval_precision": {
+          "top_k": 3,
+          "found_sources": [
+            "Rebhun"
+          ],
+          "missing_sources": [],
+          "score": 1.0,
+          "top_score": 0.531
+        }
+      },
+      "error": null
+    }
+  ]
+}

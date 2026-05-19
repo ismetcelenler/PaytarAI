@@ -1,0 +1,131 @@
+{
+  "summary": {
+    "n": 3,
+    "fact_coverage_avg": 0.5,
+    "forbidden_pass_rate": 1.0,
+    "retrieval_precision_avg": 1.0,
+    "retrieval_top_score_avg": 0.632,
+    "latency_sec_avg": 14.321,
+    "errors": 0,
+    "by_category": {
+      "producer_natural": {
+        "n": 3,
+        "fact_coverage_avg": 0.5,
+        "forbidden_pass_rate": 1.0,
+        "retrieval_precision_avg": 1.0
+      }
+    }
+  },
+  "results": [
+    {
+      "id": "P1",
+      "category": "producer_natural",
+      "user_role": "producer",
+      "question": "hayvanın memesi şişmiş",
+      "response": "🚨 ACİL: Hemen veteriner çağırın!\n\nMemesinin şişmesi ve sıcak, ağrılı olması büyük ihtimalle memede iltihap (süt iltihabı) nedeniyle olur. Bu durum, bakterilerin memeye girmesiyle ortaya çıkar ve hayvanın ateşi yükselmiş, iştahı azalmış ve genel olarak halsizleşmiş olabilir. Özellikle yeni doğum sonrası ya da son zamanlarda süt vermeye başlayan ineklerde sık görülür.\n\nVeteriner gelene kadar şunları yapabilirsiniz:\n- İneği temiz, kuru ve rahat bir yere koyun; soğuk havadan koruyun. \n- Şişmiş memeyi hafifçe soğuk suyla yıkayın, ama suyu çok soğuk tutmayın. \n- Suyu ve yemini rahatça ulaşabileceği bir yere koyun, zorla içirmeyin. \n- Memeyi sık sık kontrol edin; şişlik artarsa ya da hayvan ayakta duramıyorsa hemen veterinerinizi bilgilendirin.\n\nVeterineriniz muhtemelen memeye antibiyotik ve gerekirse sıvı tedavisi uygulayacaktır. Erken müdahale, hastalığın yayılmasını ve hayvanın kaybını önlemek için çok önemlidir.\n\n⚠️ Bu bilgi karar desteğidir. Uygulamadan önce mutlaka bir veteriner hekime danışın.",
+      "response_status": "accepted",
+      "critic_attempts": 1,
+      "active_model": "openai/gpt-oss-120b",
+      "evidence_confidence": "high",
+      "latency_sec": 32.024,
+      "metrics": {
+        "fact_coverage": {
+          "matched": [
+            "veteriner"
+          ],
+          "missed": [
+            "meme iltihabı|meme sorunu|mastitis",
+            "sağım|hijyen"
+          ],
+          "score": 0.333
+        },
+        "forbidden_check": {
+          "violations": [],
+          "passed": true
+        },
+        "retrieval_precision": {
+          "mode": "threshold",
+          "top_k": 3,
+          "found_sources": [],
+          "missing_sources": [],
+          "score": 1.0,
+          "top_score": 0.565
+        }
+      },
+      "error": null
+    },
+    {
+      "id": "P2",
+      "category": "producer_natural",
+      "user_role": "producer",
+      "question": "ineğim topallıyor ne yapym",
+      "response": "Kaç gündür topallıyor? \nAteşi var mı, yemini ya da suyunu alıyor mu? \n\n⚠️ Bu bilgi karar desteğidir. Uygulamadan önce mutlaka bir veteriner hekime danışın.",
+      "response_status": "accepted",
+      "critic_attempts": 0,
+      "active_model": "openai/gpt-oss-120b",
+      "evidence_confidence": "high",
+      "latency_sec": 7.393,
+      "metrics": {
+        "fact_coverage": {
+          "matched": [
+            "veteriner"
+          ],
+          "missed": [
+            "tırnak|ayak|eklem"
+          ],
+          "score": 0.5
+        },
+        "forbidden_check": {
+          "violations": [],
+          "passed": true
+        },
+        "retrieval_precision": {
+          "mode": "threshold",
+          "top_k": 3,
+          "found_sources": [],
+          "missing_sources": [],
+          "score": 1.0,
+          "top_score": 0.667
+        }
+      },
+      "error": null
+    },
+    {
+      "id": "P3",
+      "category": "producer_natural",
+      "user_role": "producer",
+      "question": "buzağı yem yemiyor neden",
+      "response": "Buzağınızın yem yememesinin ne kadar süredir devam ettiğini ve başka belirtiler gösterip göstermediğini öğrenmem gerekiyor.\n\n- Kaç gündür yem yemiyor? \n- Ateşi, su içme durumu, ishal ya da burun akıntısı gibi başka bir belirti var mı? \n\n⚠️ Bu bilgi karar desteğidir. Uygulamadan önce mutlaka bir veteriner hekime danışın.",
+      "response_status": "accepted",
+      "critic_attempts": 0,
+      "active_model": "openai/gpt-oss-120b",
+      "evidence_confidence": "high",
+      "latency_sec": 3.546,
+      "metrics": {
+        "fact_coverage": {
+          "matched": [
+            "ateş|dışkı|kaç gün|yaş",
+            "veteriner"
+          ],
+          "missed": [
+            "iştah|iştahsızlık"
+          ],
+          "score": 0.667
+        },
+        "forbidden_check": {
+          "violations": [],
+          "passed": true
+        },
+        "retrieval_precision": {
+          "mode": "threshold",
+          "top_k": 3,
+          "found_sources": [],
+          "missing_sources": [],
+          "score": 1.0,
+          "top_score": 0.663
+        }
+      },
+      "error": null
+    }
+  ]
+}

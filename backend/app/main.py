@@ -4,13 +4,21 @@ PaytarAI Backend — FastAPI Entry Point
 CORS, lifecycle hooks, ve router mount'larını içerir.
 """
 
+# OMP/MKL native conflict fix — BGE-M3 (FlagEmbedding) ile langgraph birlikte
+# yuklendiginde Intel MKL/libomp cakismasini onler. Diger import'lardan ONCE.
+import os
+os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
+os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
+
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
+
+# Embeddings (BGE-M3) langgraph'tan ONCE yuklenmeli — segfault onler
+from app.rag import embeddings  # noqa: F401
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
-import os
 import pathlib
 
 dotenv_path = pathlib.Path(__file__).parent.parent.parent / ".env"

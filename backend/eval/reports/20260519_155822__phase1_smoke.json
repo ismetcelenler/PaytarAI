@@ -1,0 +1,69 @@
+{
+  "summary": {
+    "n": 1,
+    "fact_coverage_avg": 0.667,
+    "fact_coverage_llm_avg": 1.0,
+    "forbidden_pass_rate": 1.0,
+    "retrieval_precision_avg": 1.0,
+    "retrieval_top_score_avg": 0.754,
+    "latency_sec_avg": 16.903,
+    "errors": 0,
+    "by_category": {
+      "producer_natural": {
+        "n": 1,
+        "fact_coverage_avg": 0.667,
+        "forbidden_pass_rate": 1.0,
+        "retrieval_precision_avg": 1.0
+      }
+    }
+  },
+  "results": [
+    {
+      "id": "P1",
+      "category": "producer_natural",
+      "user_role": "producer",
+      "question": "hayvanın memesi şişmiş",
+      "response": "🚨 ACİL: Eğer hayvan çok yüksek ateş (≥39 °C), şiddetli ağrı, süt akmıyorsa ya da genel olarak çok halsizse hemen veterinerinizi arayın!\n\n**Yapılacaklar:**\n1. **Sıcak‑soğuk kompres** – İlk 30 dakikada ılık (yaklaşık 38 °C) suyla ıslatılmış temiz bir bezle memeyi hafifçe sıkın, ardından 15‑20 dk soğuk (buzlu su ama doğrudan temas olmadan) kompres uygulayın. Bu, şişliği ve ağrıyı azaltır. \n2. **Meme temizliği** – Ilık su ve temiz bir bezle memeyi nazikçe silin. Kirli ya da kanlı sıvı varsa, hafif bir iyotlu su (povidon iyot %1) ile temizleyin, ardından bol suyla durulayın. \n3. **Süt sağma** – Memeyi hafifçe sağın (elle ya da temiz bir sağma kabı ile). Süt akmazsa, hafif bir baskı yaparak bir miktar süt çıkarmaya çalışın; bu, iltihabın yayılmasını önler. Sütü atın, hayvanınıza vermeyin. \n4. **Elektrolit ve su** – Hayvanın susuz kalmaması için temiz, ılık suyu serbest bırakın. Yem bayisinden “elektrolit tozu” alıp 1 L ılık suya karıştırın ve 2‑3 saatte bir 500 mL verin. Süt vermeyi geçici olarak azaltın, ama suyu kesmeyin. \n5. **Ortam hijyeni** – Hayvanın yatakını temiz samanla değiştirin, nemli kalmamasına dikkat edin. Çevredeki diğer hayvanlarla teması sınırlayın; mümkünse ayrı bir bölmeye alın. \n\n**Dikkat edilmesi gereken tehlike işaretleri (vet çağırmanız gereken durumlar):**\n- Vücut sıcaklığı 39 °C’nin üzerine çıkarsa veya 24  saat içinde düşmezse. \n- Hayvan ayakta duramıyor, yürümekte zorlanıyor ya da tamamen hareketsizse. \n- Meme çok şişmiş, kırmızı, sıcak ve ağrılıysa; özellikle birden fazla memede aynı anda şişlik varsa. \n- Sütte kesik, pıhtılaşmış ya da kanlı bir görünüm varsa. \n- Hayvan iştahsız, halsiz, nefes alıp verirken zorlanıyorsa ya da soluk bir görünüm sergiliyorsa. \n\n**Birkaç soru daha:** \n- Şişlik ne kadar süredir devam ediyor? \n- Hayvanın ateşi ölçtünüz mü? Ölçtüyse kaç derece? \n- Süt akıyor mu, akıyorsa renk ve kıvamı nasıl? \n\nBu adımları uyguladıktan sonra hayvanın durumu nasıl değişiyor, lütfen bana bildirin.\n\n⚠️ Bu bilgi karar desteğidir. Belirtiler kötüleşirse veya 24  saatte düzelmezse mutlaka veterinerinize danışın.",
+      "response_status": "accepted",
+      "critic_attempts": 0,
+      "active_model": "gpt-oss-120b (medium reasoning) @ Cerebras",
+      "evidence_confidence": "high",
+      "latency_sec": 16.903,
+      "metrics": {
+        "fact_coverage": {
+          "matched": [
+            "veteriner",
+            "sağım|hijyen"
+          ],
+          "missed": [
+            "meme iltihabı|meme sorunu|mastitis"
+          ],
+          "score": 0.667
+        },
+        "fact_coverage_llm": {
+          "matched": [
+            "meme iltihabı|meme sorunu|mastitis",
+            "veteriner",
+            "sağım|hijyen"
+          ],
+          "missed": [],
+          "score": 1.0,
+          "method": "llm_judge"
+        },
+        "forbidden_check": {
+          "violations": [],
+          "passed": true
+        },
+        "retrieval_precision": {
+          "mode": "threshold",
+          "top_k": 3,
+          "found_sources": [],
+          "missing_sources": [],
+          "score": 1.0,
+          "top_score": 0.754
+        }
+      },
+      "error": null
+    }
+  ]
+}

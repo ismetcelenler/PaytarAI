@@ -1,0 +1,68 @@
+{
+  "summary": {
+    "n": 1,
+    "fact_coverage_avg": 0.0,
+    "fact_coverage_llm_avg": 0.0,
+    "forbidden_pass_rate": 1.0,
+    "retrieval_precision_avg": 1.0,
+    "retrieval_top_score_avg": 0.516,
+    "latency_sec_avg": 10.324,
+    "errors": 0,
+    "by_category": {
+      "producer_natural": {
+        "n": 1,
+        "fact_coverage_avg": 0.0,
+        "forbidden_pass_rate": 1.0,
+        "retrieval_precision_avg": 1.0
+      }
+    }
+  },
+  "results": [
+    {
+      "id": "P1",
+      "category": "producer_natural",
+      "user_role": "producer",
+      "question": "hayvanın memesi şişmiş",
+      "response": "",
+      "response_status": "accepted_after_max_retries",
+      "critic_attempts": 2,
+      "active_model": "gpt-oss-120b (high) @ Cerebras",
+      "evidence_confidence": "medium",
+      "latency_sec": 10.324,
+      "metrics": {
+        "fact_coverage": {
+          "matched": [],
+          "missed": [
+            "meme iltihabı|meme sorunu|mastitis",
+            "veteriner",
+            "sağım|hijyen"
+          ],
+          "score": 0.0
+        },
+        "fact_coverage_llm": {
+          "matched": [],
+          "missed": [
+            "meme iltihabı|meme sorunu|mastitis",
+            "veteriner",
+            "sağım|hijyen"
+          ],
+          "score": 0.0,
+          "method": "llm_judge"
+        },
+        "forbidden_check": {
+          "violations": [],
+          "passed": true
+        },
+        "retrieval_precision": {
+          "mode": "threshold",
+          "top_k": 3,
+          "found_sources": [],
+          "missing_sources": [],
+          "score": 1.0,
+          "top_score": 0.516
+        }
+      },
+      "error": null
+    }
+  ]
+}

@@ -1,0 +1,162 @@
+{
+  "summary": {
+    "n": 3,
+    "fact_coverage_avg": 0.667,
+    "fact_coverage_llm_avg": 0.778,
+    "forbidden_pass_rate": 1.0,
+    "retrieval_precision_avg": 1.0,
+    "retrieval_top_score_avg": 0.563,
+    "latency_sec_avg": 12.883,
+    "errors": 0,
+    "by_category": {
+      "producer_natural": {
+        "n": 3,
+        "fact_coverage_avg": 0.667,
+        "forbidden_pass_rate": 1.0,
+        "retrieval_precision_avg": 1.0
+      }
+    }
+  },
+  "results": [
+    {
+      "id": "P1",
+      "category": "producer_natural",
+      "user_role": "producer",
+      "question": "hayvanın memesi şişmiş",
+      "response": "İlk olarak, memenin şişmesi birkaç farklı nedenden kaynaklanabilir. Memede şişlik genellikle iltihaplanma veya sıvı birikimi ile ilişkilidir. İneğin memesinde kanama veya iltihap varsa, sütü kanlı veya pembe görünebilir. \n\nİneğin memesi ne zamandır şiş? Şu anda süt veriyor mu? Memesinde ağrı veya hassasiyet var mı? Bu sorular, durumu daha iyi anlamama yardımcı olacak.\n\nEğer memede şişlik varsa, şunları yapabilirsin:\n- İneği rahat bir yere yatır ve dinlenmesini sağla.\n- Memeyi nazikçe kontrol et, eğer sıcak veya ağrılıysa dikkatli ol.\n- İneğin su ve yem ihtiyacını karşıla, ama zorla yedirmemeye çalış.\n- Eğer memeden kanlı süt geliyorsa, bu durumu veterinerine bildirmen çok önemli.\n\nBu durumda, veterinerin memeyi kontrol etmeli ve gerekli tedaviyi uygulamalıdır. Çünkü bu durum, tedavi edilmezse daha ciddi sorunlara yol açabilir.\n\n⚠️ Bu bilgi karar desteğidir. Uygulamadan önce mutlaka bir veteriner hekime danışın.",
+      "response_status": "accepted",
+      "critic_attempts": 0,
+      "active_model": "gpt-4o-mini",
+      "evidence_confidence": "high",
+      "latency_sec": 14.902,
+      "metrics": {
+        "fact_coverage": {
+          "matched": [
+            "veteriner"
+          ],
+          "missed": [
+            "meme iltihabı|meme sorunu|mastitis",
+            "sağım|hijyen"
+          ],
+          "score": 0.333
+        },
+        "fact_coverage_llm": {
+          "matched": [
+            "meme iltihabı|meme sorunu|mastitis",
+            "veteriner"
+          ],
+          "missed": [
+            "sağım|hijyen"
+          ],
+          "score": 0.667,
+          "method": "llm_judge"
+        },
+        "forbidden_check": {
+          "violations": [],
+          "passed": true
+        },
+        "retrieval_precision": {
+          "mode": "threshold",
+          "top_k": 3,
+          "found_sources": [],
+          "missing_sources": [],
+          "score": 1.0,
+          "top_score": 0.538
+        }
+      },
+      "error": null
+    },
+    {
+      "id": "P2",
+      "category": "producer_natural",
+      "user_role": "producer",
+      "question": "ineğim topallıyor ne yapym",
+      "response": "Öncelikle, ineğin topallama durumu birkaç farklı sebepten kaynaklanabilir. Bu durumun ne kadar süredir devam ettiğini ve ineğin genel durumunu bilmemiz önemli. İneğin ayağında bir yaralanma var mı? Ateşi var mı? Yürümekte zorlanıyor mu?\n\nEğer ineğin topallaması birkaç gündür devam ediyorsa, bu büyük ihtimalle bir yaralanma veya eklem iltihabı nedeniyle olabilir. İneğin ayağında bir şişlik veya sıcaklık hissediyorsanız, bu iltihap belirtisi olabilir. \n\nVeteriner çağırmadan önce şunları yapabilirsin:\n- İneği sakin bir yere al, fazla hareket etmemesi için rahat bir ortam sağla.\n- İneğin ayağını kontrol et, eğer bir yaralanma varsa temiz bir bezle sarabilirsin.\n- İneğin su ve yem ihtiyacını karşıla, ama zorla yedirmemeye dikkat et.\n\nVeteriner geldiğinde, durumu daha iyi değerlendirecek ve gerekli tedaviyi uygulayacaktır. Unutma, erken müdahale her zaman daha iyi sonuçlar verir.\n\n⚠️ Bu bilgi karar desteğidir. Uygulamadan önce mutlaka bir veteriner hekime danışın.",
+      "response_status": "accepted",
+      "critic_attempts": 0,
+      "active_model": "gpt-4o-mini",
+      "evidence_confidence": "high",
+      "latency_sec": 12.337,
+      "metrics": {
+        "fact_coverage": {
+          "matched": [
+            "tırnak|ayak|eklem",
+            "veteriner"
+          ],
+          "missed": [],
+          "score": 1.0
+        },
+        "fact_coverage_llm": {
+          "matched": [
+            "tırnak|ayak|eklem",
+            "veteriner"
+          ],
+          "missed": [],
+          "score": 1.0,
+          "method": "llm_judge"
+        },
+        "forbidden_check": {
+          "violations": [],
+          "passed": true
+        },
+        "retrieval_precision": {
+          "mode": "threshold",
+          "top_k": 3,
+          "found_sources": [],
+          "missing_sources": [],
+          "score": 1.0,
+          "top_score": 0.535
+        }
+      },
+      "error": null
+    },
+    {
+      "id": "P3",
+      "category": "producer_natural",
+      "user_role": "producer",
+      "question": "buzağı yem yemiyor neden",
+      "response": "Öncelikle, buzağının yem yememesi birkaç farklı sebepten kaynaklanabilir. Bu durumu daha iyi anlayabilmek için birkaç sorum var: Buzağının yaşı nedir? Son zamanlarda herhangi bir hastalık geçirdi mi? İştahı tamamen mı kapandı yoksa sadece belirli bir yem türünü mü yemiyor? \n\nEğer buzağı çok gençse, annesinin sütünü yeterince alıp almadığını kontrol etmelisin. Ağız sütü, buzağının bağışıklık sistemini güçlendirmek için çok önemlidir. Eğer buzağı annesinin memesine ulaşamıyorsa veya sütü yeterince içemiyorsa, bu durum yem yememesine yol açabilir.\n\nAyrıca, buzağının karın bölgesinde bir şişlik veya rahatsızlık hissi varsa, bu da yem yememesine neden olabilir. Bu durumda, buzağının karın bölgesini kontrol etmen faydalı olabilir. Eğer karın şişse veya buzağı huzursuz görünüyorsa, bu gaz birikmesi veya başka bir sindirim sorunu olabilir.\n\nBu durumda yapman gerekenler:\n- Buzağının annesinin sütünü yeterince alıp almadığını kontrol et.\n- Eğer karın bölgesinde bir şişlik varsa, buzağının rahat bir pozisyonda yatmasını sağla.\n- Su ve yem ulaşabileceği bir yerde bulunsun ama zorla yedirmeye çalışma.\n- Eğer durum düzelmezse, hemen veteriner çağır.\n\nBuzağının sağlığı için en kısa sürede veterinerle iletişime geçmek en iyisi olacaktır. \n\n⚠️ Bu bilgi karar desteğidir. Uygulamadan önce mutlaka bir veteriner hekime danışın.",
+      "response_status": "accepted",
+      "critic_attempts": 0,
+      "active_model": "gpt-4o-mini",
+      "evidence_confidence": "high",
+      "latency_sec": 11.409,
+      "metrics": {
+        "fact_coverage": {
+          "matched": [
+            "ateş|dışkı|kaç gün|yaş",
+            "veteriner"
+          ],
+          "missed": [
+            "iştah|iştahsızlık"
+          ],
+          "score": 0.667
+        },
+        "fact_coverage_llm": {
+          "matched": [
+            "iştah|iştahsızlık",
+            "veteriner"
+          ],
+          "missed": [
+            "ateş|dışkı|kaç gün|yaş"
+          ],
+          "score": 0.667,
+          "method": "llm_judge"
+        },
+        "forbidden_check": {
+          "violations": [],
+          "passed": true
+        },
+        "retrieval_precision": {
+          "mode": "threshold",
+          "top_k": 3,
+          "found_sources": [],
+          "missing_sources": [],
+          "score": 1.0,
+          "top_score": 0.615
+        }
+      },
+      "error": null
+    }
+  ]
+}

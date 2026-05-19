@@ -235,6 +235,63 @@ def chunk_by_sentences(text: str, target_words: int, overlap_words: int) -> list
     return chunks
 
 
+# Phase 1 fix: cumle bazli bolme tablo gibi noktasiz metinleri ayiramayinca
+# devasa chunk'lar olusuyordu (max 81KB!). Bu hard-cap, cumle-aware'i kirmadan
+# yalnizca outlier'lara mudahale eder.
+MAX_PARENT_CHARS = 3000  # avg ~2600, %15 tolerans
+MAX_CHILD_CHARS = 600    # avg ~390, tablo satirina biraz hareket alani
+
+
+def _force_split_oversized(text: str, max_chars: int) -> list[str]:
+    """
+    Asiri buyuk text'i kademeli boler:
+    1. Satir (\\n) bazinda paketle, max_chars'a yaklas
+    2. Satir tek basina max_chars'tan buyukse karakter bazinda zorla bol
+
+    Cumle sinirina saygi gostermez (cunku cumle siniri zaten bulunamadi),
+    ama satir/paragraf yapisini korumaya calisir.
+    """
+    if len(text) <= max_chars:
+        return [text]
+
+    # 1. Satir bazinda paketleme
+    pieces: list[str] = []
+    buf: list[str] = []
+    buf_len = 0
+    for line in text.split("\n"):
+        line_len = len(line) + 1  # newline icin +1
+        if buf_len + line_len > max_chars and buf:
+            pieces.append("\n".join(buf))
+            buf = [line]
+            buf_len = line_len
+        else:
+            buf.append(line)
+            buf_len += line_len
+    if buf:
+        pieces.append("\n".join(buf))
+
+    # 2. Hala buyuk parca varsa karakter bazinda son care bol
+    result: list[str] = []
+    for p in pieces:
+        if len(p) <= max_chars:
+            result.append(p)
+        else:
+            for i in range(0, len(p), max_chars):
+                result.append(p[i:i + max_chars])
+    return result
+
+
+def _apply_outlier_guard(chunks: list[str], max_chars: int) -> list[str]:
+    """Her chunk icin boyut kontrolu, asiyorsa zorla bol."""
+    out: list[str] = []
+    for c in chunks:
+        if len(c) <= max_chars:
+            out.append(c)
+        else:
+            out.extend(_force_split_oversized(c, max_chars))
+    return out
+
+
 def parent_child_chunk(
     text: str,
     parent_words: int = 400,
@@ -245,19 +302,24 @@ def parent_child_chunk(
     """
     Qdrant Payload stratejisine uygun Parent-Child chunking.
     Once metni Ebeveynlere boler, sonra her Ebeveyni Cocuklara boler.
-    
+
+    Outlier guard: cumle bazli bolme tabloda/uzun blokta basarisiz olursa,
+    hard-cap ile zorla boluneme uygulanir (MAX_PARENT_CHARS, MAX_CHILD_CHARS).
+
     Returns:
         [{"child_text": "...", "parent_text": "..."}, ...]
     """
     results = []
     parents = chunk_by_sentences(text, parent_words, parent_overlap)
-    
+    parents = _apply_outlier_guard(parents, MAX_PARENT_CHARS)
+
     for parent_text in parents:
         children = chunk_by_sentences(parent_text, child_words, child_overlap)
+        children = _apply_outlier_guard(children, MAX_CHILD_CHARS)
         for child_text in children:
             results.append({
                 "child_text": child_text,
                 "parent_text": parent_text
             })
-            
+
     return results

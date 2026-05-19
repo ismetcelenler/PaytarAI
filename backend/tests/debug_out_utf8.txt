@@ -1,0 +1,31 @@
+﻿1. Orijinal Sorgu: hayvan─▒m yere d├╝┼şt├╝ kalkam─▒yor
+DEBUG MSG TYPE: <class 'dict'> | VALUE: {'role': 'user', 'content': 'hayvan─▒m yere d├╝┼şt├╝ kalkam─▒yor'}
+TRANSLATOR RAW RESPONSE: content='d├╝┼şme, fel├ğ, kas hasar─▒, sinir hasar─▒, omurilik hasar─▒, spinal travma, k─▒r─▒k, ├ğ─▒k─▒k, a─şr─▒, iltihap, enfeksiyon, antibiyotik, fizik tedavi, rehabilitasyon, veterinary orthopedics, spinal cord injury, fracture, dislocation, pain management, inflammation, infection, antibiotic therapy, physical therapy, rehabilitation.' additional_kwargs={} response_metadata={'token_usage': {'completion_tokens': 84, 'prompt_tokens': 237, 'total_tokens': 321, 'completion_time': 0.441937844, 'completion_tokens_details': None, 'prompt_time': 0.012685634, 'prompt_tokens_details': None, 'queue_time': 0.048661749, 'total_time': 0.454623478}, 'model_name': 'llama-3.3-70b-versatile', 'system_fingerprint': 'fp_ba38bbab80', 'service_tier': 'on_demand', 'finish_reason': 'stop', 'logprobs': None, 'model_provider': 'groq'} id='lc_run--019e1c60-6bd5-7730-9d55-43821889b5bc-0' tool_calls=[] invalid_tool_calls=[] usage_metadata={'input_tokens': 237, 'output_tokens': 84, 'total_tokens': 321}
+
+2. Zenginle┼ştirilmi┼ş Sorgu (Translator ├ç─▒kt─▒s─▒):
+
+
+3. Qdrant Benzerlik Skoru:
+0.5495007
+
+4. Bulunan D├Âk├╝manlar:
+
+--- DOC 1 ---
+Skor: 0.5495007
+Foto 32.1: T─▒kanma belirtisi: D─▒┼şk─▒ yerine beyaz─▒ms─▒, bazen kanla kar─▒┼ş─▒k bir mukus d─▒┼şk─▒lan─▒r - Bu bir k├Ârba─ş─▒rsak b├╝k├╝lmesi vakas─▒. Foto 32.2: Kanamal─▒ jejunum sendromu: Hayvan d─▒┼şk─▒ yerine kan p─▒ht─▒lar─▒ ├ğ─▒kar─▒yor. Foto 32.3: Kanamal─▒ jejunum sendromu: Jejunum'u─▒n bir k─▒sm─▒ kocaman bir kan p─▒ht─▒s─▒yla dolmu┼ş. Ba─ş─▒rsak mukozas─▒nda geni┼ş bir ├╝lser yaras─▒ Foto 32.4: Kanamal─▒ jejunum sendromu: (ba─ş─▒sa─ş─▒n i├ğ y├╝zeyi) ve kan p─▒ht─▒s─▒. Bu  yap─▒┼şkan  maddeler,  ┼şirden  ├╝lseri  vakas─▒nda  ortaya  ├ğ─▒kan si...
+
+--- DOC 2 ---
+Skor: 0.5238781
+| 11                 | Stomatitis papulosa                                                                                                                                                           |     |
+|--------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-----|
+| Foto 11.1:         | Burun ucu, ├╝st dudak ve damakta k─▒rm─▒z─▒ kabarc─▒klar. ba┼şlang─▒c─▒na ├Â...
+
+--- DOC 3 ---
+Skor: 0.5217958
+| A┼ş─▒lama                                                       |   79 |
+|---------------------------------------------------------------|------|
+| ─░┼şletmede al─▒nacak sa─şl─▒k ├Ânlemleri                           |   80 |
+| Mesleki risklere kar┼ş─▒ tavsiyeler                             |   83 |
+| 2. A─ş─▒z, dil, burun ucu hastal─▒klar─▒ ve ay─▒rt edicite┼şhisleri |   85 |
+| 10. ┼Şap hastal─▒─ş─▒                                             |   87 |
+| Sebepleri ve risk fakt├Ârleri                                ...

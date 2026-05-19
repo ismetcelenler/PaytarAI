@@ -48,7 +48,7 @@ def compress_node(state: dict) -> dict:
     try:
         llm = ChatGroq(
             api_key=settings.groq_api_key,
-            model="llama-3.3-70b-versatile",
+            model_name="llama-3.3-70b-versatile",
             temperature=0,
             max_tokens=500,
         )

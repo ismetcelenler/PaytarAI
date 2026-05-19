@@ -1,0 +1,589 @@
+{
+  "summary": {
+    "n": 12,
+    "fact_coverage_avg": 0.917,
+    "fact_coverage_llm_avg": 0.695,
+    "forbidden_pass_rate": 1.0,
+    "retrieval_precision_avg": 0.833,
+    "retrieval_top_score_avg": 0.542,
+    "latency_sec_avg": 37.021,
+    "errors": 0,
+    "by_category": {
+      "producer_natural": {
+        "n": 5,
+        "fact_coverage_avg": 0.867,
+        "forbidden_pass_rate": 1.0,
+        "retrieval_precision_avg": 1.0
+      },
+      "emergency": {
+        "n": 2,
+        "fact_coverage_avg": 0.834,
+        "forbidden_pass_rate": 1.0,
+        "retrieval_precision_avg": 1.0
+      },
+      "management": {
+        "n": 2,
+        "fact_coverage_avg": 1.0,
+        "forbidden_pass_rate": 1.0,
+        "retrieval_precision_avg": 1.0
+      },
+      "out_of_scope": {
+        "n": 1,
+        "fact_coverage_avg": 1.0,
+        "forbidden_pass_rate": 1.0,
+        "retrieval_precision_avg": 1.0
+      },
+      "out_of_scope_planned": {
+        "n": 2,
+        "fact_coverage_avg": 1.0,
+        "forbidden_pass_rate": 1.0,
+        "retrieval_precision_avg": 0.0
+      }
+    }
+  },
+  "results": [
+    {
+      "id": "P1",
+      "category": "producer_natural",
+      "user_role": "producer",
+      "question": "hayvanın memesi şişmiş",
+      "response": "🚨 ACİL: Hemen veteriner çağırın! \n\n**Yapılacaklar:** \n1. **Üstteki şişliği kontrol et:** Meme bölgesini nazikçe elinle hisset. Sert, sıcak ve şişmiş bir bölge varsa bu iltihap belirtisidir. \n2. **Sütü incele:** Sütü bir kaba boşalt ve renk ile kıvamına bak. Süt beyazdan sarıya dönmüş, su gibi seyrelmiş ya da kanlı görünüyorsa bu durum iltihabın yaygın olduğunu gösterir. \n3. **Temiz ve ılık suyla yıka:** Meme ve memeyi çevreleyen bölgeyi ılık su ve temiz bir bezle nazikçe temizle. Kir ve bakterileri azaltmak için bu adım çok önemlidir. \n4. **Sıcak kompres uygula:** Temiz bir bez ya da sıcak su torbasını (çok sıcak olmamalı) şişmiş bölgeye 15‑20 dakika kadar koy. Bu, iltihabın hafiflemesine yardımcı olur. Günde 2‑3 kez tekrarlayabilirsin. \n5. **Sıvı takviyesi ver:** Hayvan su içmiyorsa, yem bayisinden alabileceğin elektrolit tozunu ılık suya karıştır ve bir şırınga ya da biberonla yavaşça içir. Bu, dehidrasyonu önler. \n\n**Tehlike işaretleri (bunları görürsen ACİL):** \n- Hayvan ayakta duramıyor, uzun süre yatıyor. \n- Nefesi çok hızlı ya da derin, kalp atışı hızlı. \n- Sütte kan görüyorsan ya da çok kötü koku alıyorsan. \n- Şişlik 12‑24 saat içinde azalmıyorsa ya da daha da büyüyorsa. \n- Hayvanın gözleri çukurlaşmış gibi görünüyorsa (şiddetli susuzluk). \n\n**Birkaç soru:** \n- Şişlik ne kadar süredir var? \n- Hayvan su içiyor mu, iştahı nasıl? \n- Sütte renk ya da koku değişikliği fark ettin mi? \n\nBu adımları uygularken hayvanı kuru, temiz bir ortamda tut, stresten uzak tut ve mümkün olduğunca yalnız bir bölgeye izole et. \n\n⚠️ Bu bilgi karar desteğidir. Belirtiler kötüleşirse veya 24 saatte düzelmezse mutlaka veterinerinize danışın.",
+      "response_status": "accepted_after_max_retries",
+      "critic_attempts": 2,
+      "active_model": "gpt-oss-120b (medium reasoning) @ Cerebras",
+      "evidence_confidence": "medium",
+      "latency_sec": 6.643,
+      "metrics": {
+        "fact_coverage": {
+          "matched": [
+            "veteriner"
+          ],
+          "missed": [
+            "meme iltihabı|meme sorunu|mastitis",
+            "sağım|hijyen"
+          ],
+          "score": 0.333
+        },
+        "fact_coverage_llm": {
+          "matched": [
+            "meme iltihabı|meme sorunu|mastitis",
+            "veteriner"
+          ],
+          "missed": [
+            "sağım|hijyen"
+          ],
+          "score": 0.667,
+          "method": "llm_judge"
+        },
+        "forbidden_check": {
+          "violations": [],
+          "passed": true
+        },
+        "retrieval_precision": {
+          "mode": "threshold",
+          "top_k": 3,
+          "found_sources": [],
+          "missing_sources": [],
+          "score": 1.0,
+          "top_score": 0.586
+        }
+      },
+      "error": null
+    },
+    {
+      "id": "P2",
+      "category": "producer_natural",
+      "user_role": "producer",
+      "question": "ineğim topallıyor ne yapym",
+      "response": "🚨 ACİL: Ayakında şişlik, yara açılması, hayvan ayakta duramıyorsa ya da ağrı çok şiddetliyse hemen veteriner çağırın! \n\n**Yapılacaklar:** \n1. **Ayak temizliği:** Ayakları ılık suyla nazikçe yıkayın, ardından temiz bir bezle kurulayın. Gerekirse hafif bir antiseptik (povidon iyot gibi) kullanabilirsiniz. \n2. **Yatak ve ortam:** Sıcak, kuru ve temiz bir yatak hazırlayın. Eski samanı temizleyip yeni, kuru samanla değiştirin; ayakların ıslak zeminde kalmasını önleyin. \n3. **Sıvı takviyesi:** Yem bayisinden elektrolit tozu alın. Tozu ılık suyla karıştırarak hayvanınıza verin; su tüketimini artırmak için sık sık su kabını temiz tutun. \n4. **Beslenme:** Eğer hayvan çok az yem yiyorsa, sert ot ve saman yerine yumuşak, sindirimi kolay yem (örneğin, çim veya yumuşak silaj) verin. Süt vermeyi geçici olarak azaltabilirsiniz. \n5. **Veterinerle iletişim:** Durumu telefonla bildirin, gerekirse hayvanı bir sonraki en yakın veteriner kliniğine taşıyın. \n\n**Tehlike işaretleri (vet):** \n- Ayakta şişlik, kızarıklık veya sıcaklık artışı. \n- Yara açılması, kan gelmesi veya kötü koku. \n- Hayvan ayakta duramıyor, otururken bile ağrıyor. \n- Lamenlik 24 saat içinde düzelmezse. \n\n**Sormam gerekenler:** \n- Topallama ne kadar süredir devam ediyor? \n- Ayakında herhangi bir yara, şişlik ya da kızarıklık var mı? \n- Hayvanın iştahı ve su tüketimi nasıl? \n\n⚠️ Bu bilgi karar desteğidir. Belirtiler kötüleşirse veya 24 saatte düzelmezse mutlaka veterinerinize danışın.",
+      "response_status": "accepted_after_max_retries",
+      "critic_attempts": 2,
+      "active_model": "gpt-oss-120b (medium reasoning) @ Cerebras",
+      "evidence_confidence": "medium",
+      "latency_sec": 58.171,
+      "metrics": {
+        "fact_coverage": {
+          "matched": [
+            "tırnak|ayak|eklem",
+            "veteriner"
+          ],
+          "missed": [],
+          "score": 1.0
+        },
+        "fact_coverage_llm": {
+          "matched": [
+            "tırnak|ayak|eklem",
+            "veteriner"
+          ],
+          "missed": [],
+          "score": 1.0,
+          "method": "llm_judge"
+        },
+        "forbidden_check": {
+          "violations": [],
+          "passed": true
+        },
+        "retrieval_precision": {
+          "mode": "threshold",
+          "top_k": 3,
+          "found_sources": [],
+          "missing_sources": [],
+          "score": 1.0,
+          "top_score": 0.568
+        }
+      },
+      "error": null
+    },
+    {
+      "id": "P3",
+      "category": "producer_natural",
+      "user_role": "producer",
+      "question": "buzağı yem yemiyor neden",
+      "response": "**Yapılacaklar**\n\n1. **Durumu gözlemle** – Buzağının vücut ısısını kontrol et. Normal sıcaklık 38‑39 °C civarındadır. Ateş varsa, hastalığın ciddiyetini gösterir. \n2. **Sıvı ve elektrolit desteği ver** – Yem bayisinden “elektrolit tozu” al. 1 litre ılık suya karıştır ve 2‑3 saat aralıklarla 500 ml kadar biberon ya da temiz bir kapla içir. Bu, kaybedilen su ve mineralleri yerine koyar. \n3. **Yem ve suyu kontrol et** – Süt ya da mama suyunu geçici olarak azaltıp, sadece elektrolit çözeltisi ve az miktarda temiz su ver. Yem olarak yumuşak, lif oranı düşük bir yem (örneğin ince doğranmış saman veya yumuşak ot) sun. \n4. **Meme ve ağız temizliği** – Meme uçlarını ılık su ve temiz bir bezle nazikçe sil. Ağız içinde yara, iltihap ya da yabancı madde olup olmadığını kontrol et; varsa temiz suyla yumuşak bir bezle sil. \n5. **Ortamı sıcak ve kuru tut** – Buzağının yatakını temiz samanla değiştir, soğuk rüzgârlardan koru. Gerekirse bir battaniye ya da eski bir örtüyle ısıyı koru. \n\n**Tehlike işaretleri (bu belirtiler görülürse ACİL: Hemen veteriner çağırın)** \n- Vücut ısısı 39,5 °C’nin üzerine çıkarsa. \n- Dışkıda kan, çok kötü koku ya da çok sulu (ishal) bir durum varsa. \n- Çocuğu ayakta duramıyor, yürümekte zorlanıyor ya da tamamen hareketsizse. \n- Gözler çukurlaşmış, deri kurumuş ve gözyaşı azalmışsa. \n- 24 saat içinde iştah ve hareket hâli düzelmezse. \n\n**Takip soruları (lütfen cevaplayın)** \n- Buzağınız kaç günlük? \n- Ne zamandan beri yem yemiyor? \n- Dışkısında kan, mukus ya da renk değişikliği var mı? \n- Ateşi ölçtünüz mü, varsa kaç derece? \n\nBu adımları uygularken hayvanı sık sık kontrol edin. Eğer yukarıdaki “tehlike işaretleri” ortaya çıkarsa ya da 24 saat içinde iyileşme gözlemlenmezse, veterinerin müdahalesi şarttır. \n\n⚠️ Bu bilgi karar desteğidir. Belirtiler kötüleşirse veya 24 saatte düzelmezse mutlaka veterinerinize danışın.",
+      "response_status": "accepted_after_max_retries",
+      "critic_attempts": 2,
+      "active_model": "gpt-oss-120b (medium reasoning) @ Cerebras",
+      "evidence_confidence": "medium",
+      "latency_sec": 65.926,
+      "metrics": {
+        "fact_coverage": {
+          "matched": [
+            "iştah|iştahsızlık",
+            "ateş|dışkı|kaç gün|yaş",
+            "veteriner"
+          ],
+          "missed": [],
+          "score": 1.0
+        },
+        "fact_coverage_llm": {
+          "matched": [
+            "ateş|dışkı|kaç gün|yaş",
+            "veteriner"
+          ],
+          "missed": [
+            "iştah|iştahsızlık"
+          ],
+          "score": 0.667,
+          "method": "llm_judge"
+        },
+        "forbidden_check": {
+          "violations": [],
+          "passed": true
+        },
+        "retrieval_precision": {
+          "mode": "threshold",
+          "top_k": 3,
+          "found_sources": [],
+          "missing_sources": [],
+          "score": 1.0,
+          "top_score": 0.63
+        }
+      },
+      "error": null
+    },
+    {
+      "id": "P4",
+      "category": "producer_natural",
+      "user_role": "producer",
+      "question": "buzağıların 3ü sürekli öksürüyor",
+      "response": "**Yapılacaklar**\n\n1. **İzole et** – Öksüren buzağıları diğer hayvanlardan ayrı bir ahıra ya da bir bölmeye alın. Kapı ve pencereleri kapalı tutun, rüzgâr ve soğuk havadan koruyun. Böylece hastalığın yayılma ihtimalini azaltırsınız. \n2. **Sıvı ve elektrolit desteği** – Yem bayisinden “buzağı elektrolit tozu” alın. 1 litre ılık suya karıştırıp, günde 2 defa (her 12 saatte bir) 500 ml’yi bir şırınga ya da biberonla içirin. Bu, su kaybını önler ve bağışıklık sisteminin güçlenmesine yardımcı olur. \n3. **Beslenmeyi hafiflet** – Öksürük sırasında mideye fazla yük binmemesi için yem miktarını bir miktar azaltın, ama tamamen kesmeyin. Süt vermeyi de bir iki gün azaltabilirsiniz; bunun yerine elektrolitli suyu tercih edin. \n4. **Temiz ortam** – Yatak (saman, talaş) her 12 saatte bir temizleyin ve kuru bir şekilde yenisini koyun. Meme ve burun çevresini ılık suyla ıslatılmış temiz bir bezle silin. Gerekirse povidon‑iyotlu (iyi bir antiseptik) solüsyonla hafifçe temizleyin. \n5. **Gözlem ve kayıt** – Her 4‑6 saatte bir şu bilgileri not alın: \n - Vücut ısısı (normal 38‑39 °C) \n - Öksürük şiddeti ve süresi (günde kaç kez, ses yüksekliği) \n - İştahta değişiklik, su tüketimi \n - Nefes alırken hırıltı ya da zorlanma var mı? \n\n**Tehlike işaretleri (bu bulgular varsa hemen veteriner çağırın)** \n- Nefes darlığı, göğüste “çatırtı” sesi duyulması \n- Vücut ısısının 39,5 °C’nin üzerine çıkması ve 24 saat içinde düşmemesi \n- Ağız, burun ya da dışkıda kan görülmesi \n- Yataktan kalkamama, halsizlik ve gözlerin çukurlaşması \n\n**Kısa bir soru:** Öksürük ne kadar süredir devam ediyor? Buzağılarda ateş ölçtünüz mü, varsa kaç derece? İştahta bir azalma var mı? Bu bilgiler, sorunun ne kadar ilerlediğini anlamamıza yardımcı olur.\n\n⚠️ Bu bilgi karar desteğidir. Belirtiler kötüleşirse veya 24 saatte düzelmezse mutlaka veterinerinize danışın.",
+      "response_status": "accepted",
+      "critic_attempts": 0,
+      "active_model": "gpt-oss-120b (medium reasoning) @ Cerebras",
+      "evidence_confidence": "high",
+      "latency_sec": 54.146,
+      "metrics": {
+        "fact_coverage": {
+          "matched": [
+            "solunum|öksürük|akciğer",
+            "veteriner",
+            "ateş|burun akıntısı"
+          ],
+          "missed": [],
+          "score": 1.0
+        },
+        "fact_coverage_llm": {
+          "matched": [
+            "solunum|öksürük|akciğer",
+            "veteriner"
+          ],
+          "missed": [
+            "ateş|burun akıntısı"
+          ],
+          "score": 0.667,
+          "method": "llm_judge"
+        },
+        "forbidden_check": {
+          "violations": [],
+          "passed": true
+        },
+        "retrieval_precision": {
+          "mode": "threshold",
+          "top_k": 3,
+          "found_sources": [],
+          "missing_sources": [],
+          "score": 1.0,
+          "top_score": 0.646
+        }
+      },
+      "error": null
+    },
+    {
+      "id": "P5",
+      "category": "producer_natural",
+      "user_role": "producer",
+      "question": "hayvanların derisinde tüy dökülmesi var neden",
+      "response": "**Yapılacaklar**\n\n1. **Hayvanı izole et ve ortamı temizle** – Tüy dökülen hayvanı diğer hayvanlardan ayır, yatak ve kafesini temiz saman ya da talaşla değiştir. Nemli ortam tüy dökülmesini ve enfeksiyonları artırır, bu yüzden kuru ve iyi havalandırılan bir yer seç.\n\n2. **Cilt ve tüy durumunu kontrol et** \n - Kaşıntı, kızarıklık, kabuk, yara ya da pul gibi belirtiler var mı? \n - Tüy dökülmesi tek bir bölgeye mi yoksa tüm vücuda yayılmış mı? \n - Hayvanın iştahı, su tüketimi ve hareket hâli normal mi?\n\n3. **Beslenmeyi gözden geçir** \n - Günlük yemde yeterli protein, vitamin (özellikle B‑vitamin kompleksi) ve mineral (çinko, selenyum) olduğundan emin ol. \n - Eksik olduğunu düşündüğün takviyeleri yem bayisinden “deri ve tüy desteği” olarak satılan ürünlerden temin edebilirsin. Ürün talimatına göre, genellikle yemle karıştırılarak ya da suya eklenerek verilir; günde bir kez, iki hafta boyunca uygulayabilirsin.\n\n4. **Parazit ve mantar kontrolü** \n - Deri üzerinde pire, kene, mange (köstebek) gibi dış parazit belirtileri arayın. \n - Eğer pul veya kabuk görürsen, hayvanın tüylerine “parazit kontrol spreyi” (yem bayisinde “mange tedavisi” olarak satılan) uygulayın. Ürünün etiketindeki kullanım sıklığını (genellikle 3‑5 gün arası) takip edin. \n - Mantar şüphesi varsa, temiz suyla yıkanmış bir bezle bölgeyi hafifçe silip, “deri antiseptik solüsyon” (povidon iyot ya da oksijenli su) ile dezenfekte edin.\n\n5. **Stresi azalt ve hijyen sağlayın** \n - Hayvanın bulunduğu alanı sessiz, sıcak (ama aşırı sıcak olmayan) ve rüzgârsız tutun. \n - Günlük temizlik rutini oluşturun; kirli su ve dışkı birikmesini önleyin.\n\n**Tehlike işaretleri (vet çağırın)** \n\n- Ciltte büyük, açık yara ya da kanama varsa. \n- Hayvan çok halsiz, iştahsız, su içmiyorsa. \n- Ateşi 39 °C’nin üzerine çıkarsa. \n- Tüy dökülmesi 24 saat içinde artarsa ya da diğer hayvanlarda da aynı belirtiler görülürse. \n\n**Takip soruları (lütfen cevaplayın)** \n\n- Tüy dökülmesi ne kadar süredir devam ediyor? \n- Kaşıntı, kızarıklık, pul veya yara gibi ek bulgular var mı? \n- Son zamanlarda yemde bir değişiklik ya da yeni bir takviye kullandınız mı? \n- Diğer hayvanlarda benzer bir durum gözlemlediniz mi?\n\nBu adımları uyguladıktan sonra hayvanın durumu nasıl değişiyor, lütfen bana bildirin. \n\n⚠️ Bu bilgi karar desteğidir. Belirtiler kötüleşirse veya 24 saatte düzelmezse mutlaka veterinerinize danışın.",
+      "response_status": "accepted",
+      "critic_attempts": 0,
+      "active_model": "gpt-oss-120b (medium reasoning) @ Cerebras",
+      "evidence_confidence": "high",
+      "latency_sec": 2.854,
+      "metrics": {
+        "fact_coverage": {
+          "matched": [
+            "parazit|mantar|deri",
+            "veteriner"
+          ],
+          "missed": [],
+          "score": 1.0
+        },
+        "fact_coverage_llm": {
+          "matched": [
+            "parazit|mantar|deri",
+            "veteriner"
+          ],
+          "missed": [],
+          "score": 1.0,
+          "method": "llm_judge"
+        },
+        "forbidden_check": {
+          "violations": [],
+          "passed": true
+        },
+        "retrieval_precision": {
+          "mode": "threshold",
+          "top_k": 3,
+          "found_sources": [],
+          "missing_sources": [],
+          "score": 1.0,
+          "top_score": 0.587
+        }
+      },
+      "error": null
+    },
+    {
+      "id": "E1",
+      "category": "emergency",
+      "user_role": "producer",
+      "question": "inek yatmış karnı şişik duruyor",
+      "response": "🚨 ACİL: Hemen veteriner çağırın! \n\n**Yapacaklar:** \n1. **Durumu gözlemle:** İneğin vücut ısısını kontrol et (normal 38‑39 °C). Nefes alışı hızlı mı, göğsü şişmiş mi? Karnı sol tarafta şişmişse ve hayvan yatıyorsa, bu bir “gaz‑sıvı şişkinliği” (bloat) işareti olabilir. \n2. **Sıvı ve elektrolit desteği ver:** Temiz, ılık suyu bir kaba koy ve içine bir paket oral magnezyum sülfat (veya benzeri bir elektrolit tozu) ekle. Karışımı iyice karıştır ve hayvana sık sık, az miktarda içir. Bu, mide‑bağırsak gazının çözülmesine yardımcı olur. \n3. **Yem ve ot düzenle:** Süt ve yoğun yemleri geçici olarak azalt, yerine ince kesilmiş çimen samanı ya da kuru ot ver. Az miktarda, sık sık besletmek, mideyi rahatlatır ve gaz birikimini önler. \n4. **Ortamı rahatlat:** Hayvanı serin, rüzgarsız bir yerde tut, yatağını temiz samanla değiştir. Soğuk hava ve rüzgar, şişkinliği artırabilir. \n5. **Veterinerle iletişime geç:** Şişkinlik birkaç saat içinde azalmıyorsa, hayvan nefes almada zorlanıyorsa, elleri ya da ayakları soğuksa ve hareket etmiyorsa, veteriner gelene kadar bu adımları sürdür, ancak kesin tedavi için uzman müdahalesi şart. \n\n**Tehlike işaretleri (bunları görürseniz ACİL):** \n- Nefes darlığı, göğüsün yükselerek nefes alması. \n- Karnın şişkinliği 12‑24 saat içinde azalmıyorsa. \n- Hayvan ayaklarını ya da vücudunu soğuk gösteriyorsa (şok belirtisi). \n- Hayvan tamamen hareketsiz, uyarılara yanıt vermiyorsa. \n- Dışkıda kan ya da çok kötü koku varsa. \n\n**Sormam gereken birkaç soru:** \n- Şişkinlik ne kadar süredir devam ediyor? \n- Hayvanın nefes alışı normal mi, hızlı mı? \n- Son zamanlarda süt ya da yemde bir değişiklik yaptınız mı? \n\n⚠️ Bu bilgi karar desteğidir. Belirtiler kötüleşirse veya 24 saatte düzelmezse mutlaka veterinerinize danışın.",
+      "response_status": "accepted",
+      "critic_attempts": 1,
+      "active_model": "gpt-oss-120b (medium reasoning) @ Cerebras",
+      "evidence_confidence": "high",
+      "latency_sec": 63.594,
+      "metrics": {
+        "fact_coverage": {
+          "matched": [
+            "acil|hemen veteriner",
+            "karın şişmesi|şişkinlik|gaz|timpani",
+            "veteriner"
+          ],
+          "missed": [],
+          "score": 1.0
+        },
+        "fact_coverage_llm": {
+          "matched": [
+            "acil|hemen veteriner",
+            "karın şişmesi|şişkinlik|gaz|timpani",
+            "veteriner"
+          ],
+          "missed": [],
+          "score": 1.0,
+          "method": "llm_judge"
+        },
+        "forbidden_check": {
+          "violations": [],
+          "passed": true
+        },
+        "retrieval_precision": {
+          "mode": "threshold",
+          "top_k": 3,
+          "found_sources": [],
+          "missing_sources": [],
+          "score": 1.0,
+          "top_score": 0.683
+        }
+      },
+      "error": null
+    },
+    {
+      "id": "E2",
+      "category": "emergency",
+      "user_role": "producer",
+      "question": "gebe ineğim buzağını attı ne yapayım",
+      "response": "🚨 ACİL: Eğer inek çok kanama geçiriyorsa, nefes almada zorluk yaşıyorsa ya da çok halsizse hemen bir veteriner çağırın!\n\n**Yapacaklarınız:**\n\n1. **Durumu izleyin** – Vücudunun sıcaklığını kontrol edin (normal 38‑39 °C). Dışkı, idrar ve vajinal akıntıyı gözlemleyin. İnek yem yemiyorsa, su içmiyorsa ya da hareketsiz duruyorsa bunu not edin. \n2. **Sıvı ve elektrolit takviyesi** – Yem bayisinden “oral rehidratasyon tozu” alın. Bir kap ılık suya karıştırıp, inek sık sık (günde birkaç kez) içirsin. Süt vermeyi geçici olarak azaltabilirsiniz; inek bu dönemde sadece su ve elektrolit almalı. \n3. **Temizlik ve hijyen** – Doğum sonrası bölgeyi temiz su ve hafif bir iyot solüsyonu (dilüe) ile nazikçe yıkayın. Yatağını kuru, temiz samanla değiştirin ve ortamı ılık tutun; soğuk ve rüzgârdan koruyun. \n4. **Beslenme** – Yumuşak, sindirimi kolay ot ve kaliteli saman verin. Sert yem ve aşırı proteinli yemlerden kaçının. İnek hâlâ süt veriyorsa, süt miktarını kademeli olarak azaltarak sindirim sisteminin dinlenmesini sağlayın. \n5. **Basit yara bakımı** – Vajinalda yırtık varsa, hafif bir antiseptik solüsyonla temizleyip, temiz bir bezle nazikçe sarın. Enfeksiyon belirtileri (koku, şişlik) görürseniz veterinerin müdahalesi gerekir. \n\n**Dikkat etmeniz gereken tehlike işaretleri (vet çağırmanız gereken durumlar):** \n- Kanama durmuyorsa veya artıyorsa. \n- Vücut sıcaklığı 39,5 °C’nin üzerine çıkıyorsa. \n- İnek yem yemiyorsa, su içmiyorsa ve uzun süre hareketsiz kalıyorsa. \n- Vajinal akıntı kötü kokuyorsa veya renk değişikliği gösteriyorsa. \n- İnek gözleri çukurlaşmış gibi görünüyorsa ya da tepkisi azalıyorsa. \n\n**Sormam gereken birkaç soru:** \n- Doğumdan bu yana kaç saat geçti? \n- Kanama hâlâ devam ediyor mu, yoksa durdu mu? \n- İnek ateş ölçtünüz mü, sıcaklık ne kadar? \n- Yem yemeyi tamamen bıraktı mı, su içiyor mu? \n\nBu adımları uygularken inek rahat ve stressiz bir ortamda olmasına özen gösterin. Herhangi bir belirti kötüleşirse ya da 24 saat içinde iyileşme görülmezse, mutlaka bir veterinerle iletişime geçin. \n\n⚠️ Bu bilgi karar desteğidir. Belirtiler kötüleşirse veya 24 saatte düzelmezse mutlaka veterinerinize danışın.",
+      "response_status": "accepted",
+      "critic_attempts": 1,
+      "active_model": "gpt-oss-120b (medium reasoning) @ Cerebras",
+      "evidence_confidence": "high",
+      "latency_sec": 55.735,
+      "metrics": {
+        "fact_coverage": {
+          "matched": [
+            "veteriner|acil",
+            "izolasyon|temas|hijyen"
+          ],
+          "missed": [
+            "düşük|abortus|atık"
+          ],
+          "score": 0.667
+        },
+        "fact_coverage_llm": {
+          "matched": [
+            "veteriner|acil",
+            "izolasyon|temas|hijyen"
+          ],
+          "missed": [
+            "düşük|abortus|atık"
+          ],
+          "score": 0.667,
+          "method": "llm_judge"
+        },
+        "forbidden_check": {
+          "violations": [],
+          "passed": true
+        },
+        "retrieval_precision": {
+          "mode": "threshold",
+          "top_k": 3,
+          "found_sources": [],
+          "missing_sources": [],
+          "score": 1.0,
+          "top_score": 0.637
+        }
+      },
+      "error": null
+    },
+    {
+      "id": "M1",
+      "category": "management",
+      "user_role": "producer",
+      "question": "düve kızgınlığa geldi ne zaman tohum atılmalı",
+      "response": "**Yapılacaklar**\n\n1. **Kızgınlık belirtilerini izleyin** – Dişi ayakta duruyor, diğer hayvanları itiyor, sık sık oturup kalkıyor, kuyruğunu sık sık sallıyor. Bu belirtiler başladıktan **6‑12 saat** içinde tohum atmak en uygundur. \n2. **Zamanı kaydedin** – Kızgınlık ne zaman başladı, ne zaman bitti gibi not alın. Böylece en uygun anı kaç saat içinde olduğunu net görebilirsiniz. \n3. **Tohumu hazır tutun** – Tohumu buzdolabından çıkarıp oda sıcaklığına (yaklaşık 20 °C) getirin. Çoğu tohum 30‑45 dk içinde kullanılabilir, bu yüzden hemen hazır bulundurun. \n4. **İyi bir ortam sağlayın** – Dişi rahat bir yerde, sakin bir ortamda tutun. Rüzgâr, aşırı sıcak ya da soğuk ortam tohumun başarısını azaltabilir. \n5. **Veterinerle iletişimde kalın** – Kızgınlık süresi 24 saatten uzun sürerse, dişide anormal akıntı, şişlik ya da davranış değişikliği fark ederseniz hemen veteriner çağırın.\n\n**Dikkat edilmesi gereken işaretler (acil durum)** \n- Kızgınlık 24 saatten uzun sürüyor ve hâlâ ayakta duruyor. \n- Dişide burun, vajina ya da meme bölgesinde kanlı ya da kötü kokulu akıntı var. \n- Dişi çok halsiz, ayakta duramıyor ya da yürümekte zorlanıyor. \n- Vücudunda şişlik, yara ya da gözlerde konjonktivit gibi belirtiler görülüyor.\n\n**Sormam gereken birkaç soru** \n- Kızgınlık belirtileri ne zaman başladı? \n- Dişi kaç saat boyunca ayakta duruyor ve ne kadar sık oturup kalkıyor? \n- Herhangi bir akıntı, şişlik ya da davranış değişikliği fark ettiniz mi?\n\n⚠️ Bu bilgi karar desteğidir. Belirtiler kötüleşirse veya 24 saate içinde düzelmezse mutlaka veterinerinize danışın.",
+      "response_status": "accepted",
+      "critic_attempts": 0,
+      "active_model": "gpt-oss-120b (medium reasoning) @ Cerebras",
+      "evidence_confidence": "high",
+      "latency_sec": 3.275,
+      "metrics": {
+        "fact_coverage": {
+          "matched": [
+            "östrus|kızgınlık",
+            "12 saat|tohumlama zamanı|optimal",
+            "veteriner|teknisyen"
+          ],
+          "missed": [],
+          "score": 1.0
+        },
+        "fact_coverage_llm": {
+          "matched": [
+            "östrus|kızgınlık",
+            "12 saat|tohumlama zamanı|optimal",
+            "veteriner|teknisyen"
+          ],
+          "missed": [],
+          "score": 1.0,
+          "method": "llm_judge"
+        },
+        "forbidden_check": {
+          "violations": [],
+          "passed": true
+        },
+        "retrieval_precision": {
+          "mode": "threshold",
+          "top_k": 3,
+          "found_sources": [],
+          "missing_sources": [],
+          "score": 1.0,
+          "top_score": 0.504
+        }
+      },
+      "error": null
+    },
+    {
+      "id": "M2",
+      "category": "management",
+      "user_role": "producer",
+      "question": "düvenin kızgınlığa geldiği nasıl anlaşılır bir de en uygun ne zaman tohumlanır",
+      "response": "**Düvenin kızgınlığa (estrus) geldiğini anlamanın yolları**\n\n**Yapılacaklar:**\n1. **Davranışa bak:** Kızgınlık döneminde dişi inek diğer inekleri sık sık bacaklarıyla iterek “bacak atar”. Bu hareketi sıkça görürsen, kızgınlık ihtimali yüksektir. \n2. **Vücudunu kontrol et:** Karın bölgesinin alt kısmı hafif şişer, göğüs (meme) bölgesi daha yumuşak olur. Ayrıca kuyruk başı bölgesinde hafif bir şişlik ve sıvı bir akıntı (şeffaf ya da hafif beyaz) görebilirsin. \n3. **Ses ve hareket:** Kızgınlıkta inek daha gürültülü olur, sık sık “muh” sesleri çıkarır ve ayakta durup yürürken daha aktif görünür. \n4. **Sıcaklık ölç:** Normal vücut ısısı 38‑39 °C’dir. Kızgınlıkta hafif bir artış (≈0,5 °C) olabilir; bu da bir işaret olabilir. \n5. **En uygun tohumlama zamanı:** Kızgınlık başladığında 12‑18 saat içinde inseminasyon (tohumlama) yapılmalı. En güvenli zaman, kızgınlık belirtileri başladıktan **12‑20 saat** sonra, yani inek “ayakta” ve “bacak atma” davranışı hâlâ devam ederken yapılır.\n\n**Tehlike işaretleri (vet çağır):**\n- Karın bölgesinde şiddetli şişlik, kızarıklık ya da sıcaklık artışı (enfeksiyon şüphesi). \n- İnek iştahsız, su içmiyor, ya da halsiz hâlde yatıyorsa. \n- Vajinal akıntı kanlı ya da kötü kokulu ise. \n- 24 saat içinde kızgınlık belirtileri kaybolduysa ya da inek tamamen hareketsizse.\n\n**Takip sorusu:** \n- Düven kaç günlük? (Doğum sonrası kaç gün geçti?) \n- Son kızgınlık belirtilerini ne zaman gördün? \n- Şu an vücudunda şişlik, akıntı ya da sıcaklık artışı var mı?\n\n⚠️ Bu bilgi karar desteğidir. Belirtiler kötüleşirse veya 24 saatte düzelmezse mutlaka veterinerinize danışın.",
+      "response_status": "accepted",
+      "critic_attempts": 0,
+      "active_model": "gpt-oss-120b (medium reasoning) @ Cerebras",
+      "evidence_confidence": "high",
+      "latency_sec": 63.523,
+      "metrics": {
+        "fact_coverage": {
+          "matched": [
+            "kızgınlık belirtileri|huzursuzluk|sığma|mukus",
+            "12 saat|tohumlama zamanı",
+            "veteriner|teknisyen"
+          ],
+          "missed": [],
+          "score": 1.0
+        },
+        "fact_coverage_llm": {
+          "matched": [
+            "kızgınlık belirtileri|huzursuzluk|sığma|mukus",
+            "12 saat|tohumlama zamanı"
+          ],
+          "missed": [
+            "veteriner|teknisyen"
+          ],
+          "score": 0.667,
+          "method": "llm_judge"
+        },
+        "forbidden_check": {
+          "violations": [],
+          "passed": true
+        },
+        "retrieval_precision": {
+          "mode": "threshold",
+          "top_k": 3,
+          "found_sources": [],
+          "missing_sources": [],
+          "score": 1.0,
+          "top_score": 0.602
+        }
+      },
+      "error": null
+    },
+    {
+      "id": "O1",
+      "category": "out_of_scope",
+      "user_role": "producer",
+      "question": "kuşumun gagası kırıldı ne yapmalıyım",
+      "response": "Bu konuda kesin bilgi veremem. Sistemimiz yalnızca büyükbaş hayvan (sığır, inek, buzağı, düve, dana) konularında bilgi sunabiliyor. Lütfen sorduğunuz konuyla ilgili uzmana ya da veteriner hekiminize danışın.\n\n⚠️ Bu bilgi karar desteğidir.",
+      "response_status": "out_of_scope",
+      "critic_attempts": 0,
+      "active_model": "scope_classifier (gpt-oss-120b low)",
+      "evidence_confidence": "insufficient",
+      "latency_sec": 4.137,
+      "metrics": {
+        "fact_coverage": {
+          "matched": [
+            "büyükbaş dışı|bilgi yok|kanatlı|kuş veterineri|veterinerinize|ilgili uzman"
+          ],
+          "missed": [],
+          "score": 1.0
+        },
+        "fact_coverage_llm": {
+          "matched": [],
+          "missed": [
+            "büyükbaş dışı|bilgi yok|kanatlı|kuş veterineri|veterinerinize|ilgili uzman"
+          ],
+          "score": 0.0,
+          "method": "llm_judge"
+        },
+        "forbidden_check": {
+          "violations": [],
+          "passed": true
+        },
+        "retrieval_precision": {
+          "mode": "expect_fail",
+          "top_k": 3,
+          "found_sources": [],
+          "missing_sources": [],
+          "score": 1.0,
+          "top_score": 0.0
+        }
+      },
+      "error": null
+    },
+    {
+      "id": "O2",
+      "category": "out_of_scope_planned",
+      "user_role": "producer",
+      "question": "holstein cinsi hayvanların özellikleri neler",
+      "response": "Holstein ırkı, süt üretiminde en çok tercih edilen büyükbaş hayvanlardan biridir. İşte bu ırkın temel özellikleri:\n\n**Özellikler**\n1. **Süt verimi çok yüksektir** – Ortalama olarak bir Holstein, günde 30 – 40 kg arasında süt verir. Bu yüzden süt çiftliklerinde en çok kullanılan ırktır. \n2. **Büyük ve uzun gövde** – Vücut ağırlığı 600 – 800 kg civarındadır; boyu 1,45 ‑ 1,55 m, göğüs çevresi geniştir. Bu yapı, yüksek süt üretimini destekler. \n3. **Renk ve işaret** – Tipik olarak siyah ve beyaz lekeli bir kürke sahiptir; bazı bireylerde kırmızı‑beyaz varyasyonları da görülür. \n4. **Yüksek yem tüketimi** – Günlük yem ihtiyacı 20 ‑ 25 kg kuru madde civarındadır. Bu yüzden yem stoğu ve yem kalitesi iyi yönetilmelidir. \n5. **Metabolik hastalıklara eğilimli** – Yüksek süt üretimi nedeniyle ketoz, metrit, mastit gibi metabolik ve enfeksiyon hastalıkları riski diğer ırklara göre daha fazladır. Düzenli sağlık takibi ve dengeli beslenme bu riskleri azaltır. \n6. **Üreme performansı** – Ortalama olarak 12‑13 ayda bir doğum yapar; ancak yüksek süt üretimi bazen doğurganlıkta düşüşe yol açabilir. Uygun beslenme ve stresin azaltılması doğurganlığı korur. \n\nHolstein’ların bu özellikleri, onları yoğun süt üretimi yapılan çiftliklerde ideal kılar. Ancak yüksek verim, aynı zamanda beslenme, sağlık ve bakım konularında daha titiz bir yönetim gerektirir. Süt verimini korumak ve hastalık riskini azaltmak için hayvanların günlük yem tüketimini, vücut kondisyon skorunu (ideal 2.5‑3.5/5) ve süt kalitesini düzenli olarak izlemek faydalı olur.\n\n⚠️ Bu bilgi karar desteğidir. Belirtiler kötüleşirse veya 24 saatte düzelmezse mutlaka veterinerinize danışın.",
+      "response_status": "accepted_after_max_retries",
+      "critic_attempts": 2,
+      "active_model": "gpt-oss-120b (medium reasoning) @ Cerebras",
+      "evidence_confidence": "low",
+      "latency_sec": 63.599,
+      "metrics": {
+        "fact_coverage": {
+          "matched": [
+            "bilgi yok|kaynaklarda yok|ırk|verim"
+          ],
+          "missed": [],
+          "score": 1.0
+        },
+        "fact_coverage_llm": {
+          "matched": [
+            "bilgi yok|kaynaklarda yok|ırk|verim"
+          ],
+          "missed": [],
+          "score": 1.0,
+          "method": "llm_judge"
+        },
+        "forbidden_check": {
+          "violations": [],
+          "passed": true
+        },
+        "retrieval_precision": {
+          "mode": "expect_fail",
+          "top_k": 3,
+          "found_sources": [],
+          "missing_sources": [],
+          "score": 0.0,
+          "top_score": 0.494
+        }
+      },
+      "error": null
+    },
+    {
+      "id": "O3",
+      "category": "out_of_scope_planned",
+      "user_role": "producer",
+      "question": "süt veriminde hangi hayvan ırkı daha iyi",
+      "response": "**Süt veriminde yüksek ırklar**\n\n1. **Holstein‑Friesian** – Türkiye’de en çok kullanılan ırk. Günlük 30 – 40 kg kadar süt verir; bazı iyi bakımlı hayvanlarda 45 kg’a kadar çıkabilir. \n2. **Brown Swiss** – Holstein kadar yüksek verim sağlamaz (25 – 35 kg/gün), ama süt yağ oranı yüksektir ve hastalıklara karşı dayanıklıdır. \n3. **Simental (Şimmental)** – Ortalama 25 – 30 kg/gün süt üretir; soğuk iklimde iyi performans gösterir. \n4. **Jersey** – Süt miktarı 20 – 25 kg/gün civarındadır, fakat yağ ve protein oranı çok yüksektir; peynir yapımında tercih edilir. \n\n**Seçim yaparken dikkat etmeniz gerekenler**\n\n- **Beslenme**: Yüksek verimli ırklar, iyi dengelenmiş yem ve yeterli su almazsa verim düşer. Günlük 1,5 – 2 kg uzun lifli ot ya da saman ve %60‑%70 kuru madde içeren rasyon vermek gerekir. \n- **Sağlık takibi**: Hastalıkların erken fark edilmesi süt kaybını önler. Düzenli ateş, iştah ve dışkı kontrolü yapın. \n- **Süt sağma düzeni**: Her gün aynı saatlerde sağım, hayvanın rahat bir ortamda olması ve temiz ekipman kullanımı verimi artırır. \n- **İklim ve barınak**: Sıcaklık dalgalanmalarını önlemek, rüzgâr ve nemi kontrol altında tutmak özellikle Holstein gibi yüksek verimli ırklar için önemlidir. \n- **Genetik seçim**: Aynı ırk içinde de süt verimi farklılık gösterebilir. Çiftlik içinde en iyi süt veren dişileri ve boğaları belirleyip, bunları çiftleştirerek verimi artırabilirsiniz. \n\n**Sizin çiftliğinizde hangi ırk daha uygun?** \n- Çiftliğinizin büyüklüğü, mevcut yem stoğu ve iklim koşulları nasıldır? \n- Süt üretimini sadece miktar mı, yoksa yağ ve protein kalitesi de mi önemsiyor? \n\nBu sorulara yanıt verirseniz, size daha net bir öneri sunabilirim. \n\n⚠️ Bu bilgi karar desteğidir. Belirtiler kötüleşirse veya 24 saatte düzelmezse mutlaka veterinerinize danışın.",
+      "response_status": "accepted",
+      "critic_attempts": 0,
+      "active_model": "gpt-oss-120b (medium reasoning) @ Cerebras",
+      "evidence_confidence": "high",
+      "latency_sec": 2.648,
+      "metrics": {
+        "fact_coverage": {
+          "matched": [
+            "bilgi yok|kaynaklarda yok|veterinerinize|uzmanına"
+          ],
+          "missed": [],
+          "score": 1.0
+        },
+        "fact_coverage_llm": {
+          "matched": [],
+          "missed": [
+            "bilgi yok|kaynaklarda yok|veterinerinize|uzmanına"
+          ],
+          "score": 0.0,
+          "method": "llm_judge"
+        },
+        "forbidden_check": {
+          "violations": [],
+          "passed": true
+        },
+        "retrieval_precision": {
+          "mode": "expect_fail",
+          "top_k": 3,
+          "found_sources": [],
+          "missing_sources": [],
+          "score": 0.0,
+          "top_score": 0.573
+        }
+      },
+      "error": null
+    }
+  ]
+}

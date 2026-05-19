@@ -1,53 +1,68 @@
 """
-PaytarAI — OpenAI Embeddings Wrapper
+PaytarAI — BGE-M3 Embeddings (Phase 1)
 
-text-embedding-3-small modeli ile vektör olusturma.
+Multilingual cross-lingual embedder.
+Model: BAAI/bge-m3 (1024 boyut, Apache-2.0)
+
+ONEMLI: Bu modulun langgraph'tan ONCE import edilmesi gerekir, aksi halde
+native lib (OMP/MKL) cakismasi nedeniyle segfault olusur.
+run_eval.py vb. giris noktalari bunu basinda zorlar.
 """
 
-from openai import OpenAI
+import os
+# OMP/MKL native conflict onleyici — torch import'undan ONCE set edilmeli
+os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
+os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
 
-from app.config import settings
-
-_client: OpenAI | None = None
-
-EMBEDDING_MODEL = "text-embedding-3-small"
-EMBEDDING_DIMENSION = 1536
-
-
-def get_openai_client() -> OpenAI:
-    """OpenAI client singleton."""
-    global _client
-    if _client is None:
-        key = settings.openai_api_key
-        if not key:
-            import os
-            key = os.environ.get("OPENAI_API_KEY", "")
-        _client = OpenAI(api_key=key)
-    return _client
+from FlagEmbedding import BGEM3FlagModel
+import torch
 
 
-def embed_texts(texts: list[str]) -> list[list[float]]:
-    """
-    Metin listesini embedding vektorlerine donusturur.
+EMBEDDING_MODEL = "BAAI/bge-m3"
+EMBEDDING_DIMENSION = 1024
+DEFAULT_BATCH_SIZE = 12
+DEFAULT_MAX_LENGTH = 512
 
-    Args:
-        texts: Metin listesi
+_model: BGEM3FlagModel | None = None
 
-    Returns:
-        Her metin icin embedding vektoru listesi
-    """
+
+def _device_info() -> str:
+    if torch.cuda.is_available():
+        return f"cuda:0 ({torch.cuda.get_device_name(0)})"
+    return "cpu"
+
+
+def get_model() -> BGEM3FlagModel:
+    """BGE-M3 singleton (lazy load)."""
+    global _model
+    if _model is None:
+        use_cuda = torch.cuda.is_available()
+        print(f"[Embeddings] BGE-M3 yukleniyor (device={_device_info()}, fp16={use_cuda})...")
+        _model = BGEM3FlagModel(
+            EMBEDDING_MODEL,
+            use_fp16=use_cuda,
+        )
+        print(f"[Embeddings] BGE-M3 hazir.")
+    return _model
+
+
+def embed_texts(texts: list[str], batch_size: int = DEFAULT_BATCH_SIZE) -> list[list[float]]:
+    """Metin listesini dense embedding vektorlerine donusturur."""
     if not texts:
         return []
-
-    client = get_openai_client()
-    response = client.embeddings.create(
-        model=EMBEDDING_MODEL,
-        input=texts,
+    model = get_model()
+    output = model.encode(
+        texts,
+        batch_size=batch_size,
+        max_length=DEFAULT_MAX_LENGTH,
+        return_dense=True,
+        return_sparse=False,
+        return_colbert_vecs=False,
     )
-    return [item.embedding for item in response.data]
+    return [[float(x) for x in v] for v in output["dense_vecs"]]
 
 
 def embed_single(text: str) -> list[float]:
-    """Tek bir metni embedding vektorune donusturur."""
-    result = embed_texts([text])
+    """Tek metni embedding vektorune donusturur."""
+    result = embed_texts([text], batch_size=1)
     return result[0] if result else []

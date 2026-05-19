@@ -6,13 +6,12 @@ Retrieved docs'u context olarak kullanir.
 """
 
 from langchain_openai import ChatOpenAI
-from langchain_groq import ChatGroq
 from app.config import settings
 from app.graph.prompts import get_system_prompt
 from app.graph.audit import audit_log
 
 
-CONTEXT_TEMPLATE = """Asagida veteriner literaturunden alinan referans bilgiler bulunmaktadir.
+CONTEXT_TEMPLATE_VET = """Asagida veteriner literaturunden alinan referans bilgiler bulunmaktadir.
 Yanitini YALNIZCA bu kaynaklara dayanarak olustur. Kaynakta olmayan bilgiyi EKLEME.
 
 ZORUNLU KURALLAR:
@@ -25,6 +24,23 @@ ZORUNLU KURALLAR:
 --- KAYNAKLAR SONU ---
 
 Kullanici sorusu: {question}"""
+
+
+CONTEXT_TEMPLATE_PRODUCER = """Asagida arka planda kullanacagin referans bilgiler var. Bu kaynaklar yalnizca SENIN icin —
+ciftciye bu kaynaklardan, kitap adlarindan, "[Kaynak 1]" gibi etiketlerden veya tablo numaralarindan
+ASLA bahsetme. Yanitini bu kaynaklara dayandir ama metnin disardan bakildiginda
+arka planda kaynak oldugunu HISSETTIRMESIN.
+
+ZORUNLU KURALLAR:
+- Tum birimleri Turkiye standartlarina cevir: lb -> kg, gallon -> litre, oz -> mL, F -> C
+- Sade Turkce ile yaz, tablo kullanma
+- Kaynak kelimesini bile yazma
+
+--- KAYNAKLAR (sadece senin icin) ---
+{sources}
+--- KAYNAKLAR SONU ---
+
+Ciftcinin sorusu: {question}"""
 
 
 def generator_node(state: dict) -> dict:
@@ -52,11 +68,13 @@ def generator_node(state: dict) -> dict:
         state["response_status"] = "error"
         return state
 
-    # Kaynak metinleri birlestir
+    # Kaynak metinleri birlestir — LLM'in kopyalamamasi icin "[Kaynak N]" etiketi YOK
     if retrieved_docs:
         sources_text = "\n\n".join(
-            f"[Kaynak {i+1}] (Skor: {doc['score']:.2f}) "
-            f"[{doc['metadata'].get('source_title', 'Bilinmeyen')}]\n{doc['text']}"
+            f"=== Referans {i+1} ===\n"
+            f"Kitap: {doc['metadata'].get('source_title', 'Bilinmeyen')}\n"
+            f"Iliskili Skor: {doc['score']:.2f}\n"
+            f"Metin:\n{doc['text']}"
             for i, doc in enumerate(retrieved_docs[:5])
         )
     else:
@@ -72,8 +90,9 @@ def generator_node(state: dict) -> dict:
             + "\nYukardaki sorunlari gidererek yeniden cevapla."
         )
 
-    # Context prompt
-    context_msg = CONTEXT_TEMPLATE.format(
+    # Context prompt — rol bazli sablon
+    template = CONTEXT_TEMPLATE_VET if user_role == "veterinarian" else CONTEXT_TEMPLATE_PRODUCER
+    context_msg = template.format(
         sources=sources_text,
         question=last_user_msg + rejection_context,
     )
@@ -82,20 +101,48 @@ def generator_node(state: dict) -> dict:
     system_prompt = get_system_prompt(user_role)
 
     try:
-        llm = ChatGroq(
-            api_key=settings.groq_api_key,
-            model="openai/gpt-oss-120b",
-            temperature=0.1,
-            max_tokens=1500,
+        llm = ChatOpenAI(
+            api_key=settings.cerebras_api_key,
+            base_url="https://api.cerebras.ai/v1",
+            model="gpt-oss-120b",
+            temperature=0,
+            max_tokens=3000,
+            reasoning_effort="medium",  # type: ignore[call-arg]
         )
 
-        response = llm.invoke([
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": context_msg},
-        ])
+        # 429 rate-limit icin 2 deneme — Groq error message'inda "try again in Xs" yazar
+        import re as _re
+        import time as _time
+        max_retries = 2
+        for attempt in range(max_retries + 1):
+            try:
+                response = llm.invoke([
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": context_msg},
+                ])
+                break
+            except Exception as rate_err:
+                msg = str(rate_err)
+                if "rate_limit" not in msg.lower() and "429" not in msg:
+                    raise
+                if attempt >= max_retries:
+                    raise
+                wait_match = _re.search(r"try again in ([\d.]+)s", msg)
+                wait_s = float(wait_match.group(1)) + 2.0 if wait_match else 15.0
+                print(f"[Generator] Rate limit, {wait_s:.1f}s bekle ve tekrar dene ({attempt+1}/{max_retries})")
+                _time.sleep(wait_s)
 
-        state["draft_response"] = response.content
-        state["active_model"] = "openai/gpt-oss-120b"
+        draft = str(response.content).strip()
+
+        # Reasoning model bazen content bos birakar, cevabi reasoning_content'e koyar — fallback
+        if len(draft) < 10:
+            reasoning = response.additional_kwargs.get("reasoning_content", "")
+            if reasoning and len(reasoning) > 20:
+                lines = [l.strip() for l in reasoning.strip().splitlines() if l.strip()]
+                draft = "\n".join(lines[-30:]) if lines else draft
+
+        state["draft_response"] = draft
+        state["active_model"] = "gpt-oss-120b (medium reasoning) @ Cerebras"
         state["response_status"] = "ok"
 
         audit_log(
@@ -117,17 +164,24 @@ def generator_node(state: dict) -> dict:
 
 
 def _build_fallback(docs: list[dict], role: str) -> str:
-    """LLM cagirisi basarisiz olursa kaynak metni dogrudan sunar."""
-    if not docs:
-        if role == "producer":
-            return "Bu konuda bilgi bulunamadi. Veterinerinizi arayin."
-        return "Bu konuda guvenilir literatur verisi dogrulanamadi. Lutfen baska bir kaynaga danisiniz."
+    """
+    LLM cagirisi basarisiz olursa guvenli fallback.
 
-    header = "Ilgili kaynak bilgileri:\n\n"
-    for i, doc in enumerate(docs[:3]):
-        header += f"{i+1}. {doc['text'][:500]}...\n\n"
-
+    GUVENLIK: Uretici icin asla raw chunk metnini dokmeyiz — orada Latince/Ingilizce
+    terimler, dozajlar, recete adlari olabilir. Sadece "sistem yogun, tekrar dene" mesaji.
+    """
     if role == "producer":
-        header += "Bu bilgi karar destegidir. Uygulamadan once mutlaka bir veteriner hekime danisin."
+        return (
+            "Sistemde geçici bir yoğunluk var, sorunuza şu an yanıt veremedim. "
+            "Lütfen birkaç dakika sonra tekrar deneyin.\n\n"
+            "⚠️ Acil bir durumsa bekleme — doğrudan veteriner hekiminize ulaşın."
+        )
 
-    return header
+    # Vet icin de raw chunk vermek riskli ama daha az — yine de minimal tutalim
+    if not docs:
+        return "Bu konuda guvenilir literatur verisi dogrulanamadi. Lutfen baska bir kaynaga danisin."
+    return (
+        "Sistemde geçici bir yoğunluk nedeniyle yanıt üretilemedi. "
+        f"Top retrieval skoru: {docs[0]['score']:.2f}. "
+        "Lütfen birkaç dakika sonra tekrar deneyin."
+    )

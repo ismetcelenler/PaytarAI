@@ -5,18 +5,75 @@ Taslak yaniti 5 boyutta dogrular, uyumsuzluk varsa reddeder.
 AI-PROMPT.md Section 4.5: Critic max 2 kez reddedebilir.
 """
 
+import re
+
 from app.graph.audit import audit_log
+
+
+# ---------------------------------------------------------------
+# SANITIZE — kozmetik sorunlari LLM cagirmadan temizler
+# ---------------------------------------------------------------
+
+_INLINE_CITATION_PATTERNS = [
+    r"【\s*Kaynak\s*\d+\s*】",
+    r"\[\s*Kaynak\s*\d+\s*\]",
+    r"\(\s*Kaynak\s*\d+\s*\)",
+    r"【\s*Referans\s*\d+\s*】",
+    r"\[\s*Referans\s*\d+\s*\]",
+]
+
+_META_PHRASES = [
+    "kaynakta doğrudan tedavi önerisi yoktur, sadece tanısal ilişki verilmiştir",
+    "kaynakta doğrudan tedavi önerisi yoktur",
+    "kaynakta yalnızca tanısal ilişki verilmiştir",
+    "kaynaklarda detay yok",
+    "kaynakta detay yok",
+    "tabloda görüldüğü gibi",
+    "tabloda görüldüğü üzere",
+    "kaynakta belirtilmemiş",
+]
+
+
+def _sanitize_draft(draft: str, user_role: str) -> str:
+    """Kozmetik sorunlari LLM olmadan duzeltir."""
+    cleaned = draft
+
+    # 1. Inline [Kaynak N] / 【Kaynak N】 etiketlerini sil (her iki rol icin)
+    for pat in _INLINE_CITATION_PATTERNS:
+        cleaned = re.sub(pat, "", cleaned, flags=re.IGNORECASE)
+
+    # 2. Meta-yorum cumlelerini sil (vet & uretici)
+    for phrase in _META_PHRASES:
+        cleaned = re.sub(re.escape(phrase) + r"[.,;]?\s*", "", cleaned, flags=re.IGNORECASE)
+
+    # 3. Uretici modunda kaynak satirini ve "Rebhun's" gibi kitap adlarini sil
+    if user_role == "producer":
+        # "Kaynak: ..." satirini tamamen sil
+        cleaned = re.sub(r"(?im)^\s*Kaynak\s*[:：].*$", "", cleaned)
+        cleaned = re.sub(r"(?im)^\s*Referans\s*[:：].*$", "", cleaned)
+        # Cumle icinde gecen kitap adlarini sil
+        cleaned = re.sub(r"Rebhun'?s?[^,.\n]*", "", cleaned, flags=re.IGNORECASE)
+
+    # 4. Cift bosluklari ve fazla bos satirlari topla
+    cleaned = re.sub(r"[ \t]+", " ", cleaned)
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
+    cleaned = cleaned.strip()
+
+    return cleaned
 
 
 # Critic kontrol fonksiyonlari
 
-def _check_source_citation(draft: str, docs: list[dict]) -> str | None:
-    """Yanit en az bir kaynak referansi icermeli."""
-    citation_markers = ["kaynak:", "kaynak :", "source:", "referans:", "sayfa"]
-    has_citation = any(marker in draft.lower() for marker in citation_markers)
+def _check_source_citation(draft: str, docs: list[dict], user_role: str = "veterinarian") -> str | None:
+    """Vet: sonda kaynak atfi gereklidir. Uretici: bu kontrol gecerli degil (sanitize halleder)."""
+    if user_role == "producer":
+        return None
 
+    # Vet — sondaki kaynak satiri gereklidir; inline/meta sanitize'da temizlendi
+    citation_markers = ["kaynak:", "kaynak :", "source:", "referans:"]
+    has_citation = any(marker in draft.lower() for marker in citation_markers)
     if not has_citation and docs:
-        return "Yanit hicbir kaynak referansi icermiyor. Her klinik bilginin sonuna kaynak ekle."
+        return "Yanitin sonunda kaynak atfi yok. Sonuna tek satir 'Kaynak: [Kitap Adi], bolum' ekle."
     return None
 
 
@@ -78,11 +135,33 @@ def _check_hallucination(draft: str, docs: list[dict]) -> str | None:
 def _check_role_compliance(draft: str, user_role: str) -> str | None:
     """Rol bazli uyumluluk kontrolu."""
     if user_role == "producer":
-        # Uretici modunda receteli ilac adi veya dozaj olmamali
-        prescription_markers = ["mg/kg", "ml/kg", "iv ", "i.v.", "intramuscular", "subcutaneous"]
+        # Uretici modunda receteli ilac, dozaj veya teknik terim olmamali
+        prescription_markers = [
+            # Dozaj birimleri
+            "mg/kg", "ml/kg", "mg/ml", "iu/kg", "mg/gün", "ml/gün",
+            # Uygulama yollari (EN)
+            "iv ", "i.v.", "intramuscular", "subcutaneous", "intravenous", "intramammary",
+            # Uygulama yollari (TR)
+            "intravenöz", "intramüsküler", "subkütan", "kas içi enjeksiyon", "damar içi enjeksiyon",
+            # Receteli ilac adlari
+            "penisilin", "penicillin", "oksitetrasiklin", "oxytetracycline",
+            "ampisilin", "ampicillin", "deksametazon", "dexamethasone",
+            "flunixin", "meloksikem", "meloxicam",
+            # Karmasik tibbi terimler / Latince
+            "peritonitis", "endometritis", "septisemi", "septik şok",
+            "musculoskeletal", "polyarthritis", "hipokalsemi", "hipomagnezemi",
+            "recumbency", "palpasyon", "primiparous", "multiparous",
+            "anoreksi", "subinvolüsyon", "ruminal tympani", "asidoz", "ketozis",
+        ]
         violations = [m for m in prescription_markers if m in draft.lower()]
         if violations:
-            return f"Uretici modunda teknik dozaj/uygulama bilgisi kullanildi: {violations}. Sade dilde yeniden yaz."
+            return f"Uretici modunda teknik dozaj/uygulama/ilac/tibbi terim kullanildi: {violations}. Sade Turkce ile yeniden yaz, tibbi terim parantez icinde bile yazma."
+
+        # Tablo (markdown) yasak — uretici tablo gormez
+        # En az 2 satir | ile basliyorsa veya | ... | --- ... --- | kalibi varsa tablo say
+        lines_with_pipe = [ln for ln in draft.splitlines() if ln.strip().startswith("|") and "|" in ln.strip()[1:]]
+        if len(lines_with_pipe) >= 2:
+            return "Uretici yanitinda tablo kullanildi. Tablo yerine 2-3 cumlelik sade aciklama yaz."
 
     elif user_role == "veterinarian":
         # Veteriner modunda cok basit dil kontrolu (istege bagli)
@@ -128,10 +207,14 @@ def critic_node(state: dict) -> dict:
 
     Max 2 reddetme hakki vardir. 3. denemede fallback yanit kullanilir.
     """
-    draft = state.get("draft_response", "")
+    raw_draft = state.get("draft_response", "")
     docs = state.get("retrieved_docs", [])
     user_role = state.get("user_role", "producer")
     attempts = state.get("critic_attempts", 0)
+
+    # SANITIZE: kozmetik sorunlari LLM cagirmadan temizle
+    draft = _sanitize_draft(raw_draft, user_role)
+    state["draft_response"] = draft  # generator retry alirsa temizlenmis halini gormesin diye
 
     # Max 2 red — 3. denemede kabul et
     if attempts >= 2:
@@ -151,7 +234,7 @@ def critic_node(state: dict) -> dict:
     rejections = []
 
     checks = [
-        _check_source_citation(draft, docs),
+        _check_source_citation(draft, docs, user_role),
         _check_hallucination(draft, docs),
         _check_role_compliance(draft, user_role),
         _check_emergency_flag(draft, docs),

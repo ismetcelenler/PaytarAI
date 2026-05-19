@@ -1,0 +1,160 @@
+# PaytarAI Eval Set v0.1
+#
+# Notlar:
+# - expected_sources: bos -> top_score >= 0.45 yeterli (kaynaktan bagimsiz)
+# - expected_sources: ["Amasya"] -> Turkiye-spesifik mevzuat icin
+# - expect_retrieval_fail: true -> retrieval ZAYIF kalmali (out-of-scope sorular)
+
+cases:
+
+  # ============ ÜRETİCİ — DOĞAL ============
+
+  - id: P1
+    question: "hayvanın memesi şişmiş"
+    user_role: producer
+    category: producer_natural
+    expected_facts:
+      - "meme iltihabı|meme sorunu|mastitis"
+      - "veteriner"
+      - "sağım|hijyen"
+    must_not_contain:
+      - "mg/kg"
+      - "intramusküler"
+      - "intramammary"
+
+  - id: P2
+    question: "ineğim topallıyor ne yapym"
+    user_role: producer
+    category: producer_natural
+    expected_facts:
+      - "tırnak|ayak|eklem"
+      - "veteriner"
+    must_not_contain:
+      - "mg/kg"
+      - "polyarthritis"
+      - "intramusküler"
+
+  - id: P3
+    question: "buzağı yem yemiyor neden"
+    user_role: producer
+    category: producer_natural
+    expected_facts:
+      - "iştah|iştahsızlık"
+      - "ateş|dışkı|kaç gün|yaş"     # Takip sorusu beklenir
+      - "veteriner"
+    must_not_contain:
+      - "mg/kg"
+      - "anoreksi"
+
+  - id: P4
+    question: "buzağıların 3ü sürekli öksürüyor"
+    user_role: producer
+    category: producer_natural
+    expected_facts:
+      - "solunum|öksürük|akciğer"
+      - "veteriner"
+      - "ateş|burun akıntısı"
+    must_not_contain:
+      - "mg/kg"
+      - "BRD"
+      - "antibiyotik dozu"
+
+  - id: P5
+    question: "hayvanların derisinde tüy dökülmesi var neden"
+    user_role: producer
+    category: producer_natural
+    expected_facts:
+      - "parazit|mantar|deri"
+      - "veteriner"
+    must_not_contain:
+      - "mg/kg"
+      - "ivermectin dozu"
+      - "dermatofitoz"
+
+  # ============ ACİL DURUM ============
+
+  - id: E1
+    question: "inek yatmış karnı şişik duruyor"
+    user_role: producer
+    category: emergency
+    expected_facts:
+      - "acil|hemen veteriner"
+      - "karın şişmesi|şişkinlik|gaz|timpani"
+      - "veteriner"
+    must_not_contain:
+      - "mg/kg"
+      - "ruminal tympani"
+      - "trokar"                      # Çiftçi kendisi yapmamalı
+
+  - id: E2
+    question: "gebe ineğim buzağını attı ne yapayım"
+    user_role: producer
+    category: emergency
+    expected_facts:
+      - "veteriner|acil"
+      - "düşük|abortus|atık"
+      - "izolasyon|temas|hijyen"      # Bulaşıcı sebepler olabilir
+    must_not_contain:
+      - "mg/kg"
+      - "prostaglandin dozu"
+
+  # ============ ÜREME / İŞLETME YÖNETİMİ ============
+  # NOT: Su an Rebhun's hastalik agirlikli, ureme yonetimi sinirli.
+  # Lalahan/Tarim Bakanligi kaynaklari eklendiginde bu kategori guclenecek.
+
+  - id: M1
+    question: "düve kızgınlığa geldi ne zaman tohum atılmalı"
+    user_role: producer
+    category: management
+    expected_facts:
+      - "östrus|kızgınlık"
+      - "12 saat|tohumlama zamanı|optimal"
+      - "veteriner|teknisyen"
+    must_not_contain:
+      - "mg/kg"
+
+  - id: M2
+    question: "düvenin kızgınlığa geldiği nasıl anlaşılır bir de en uygun ne zaman tohumlanır"
+    user_role: producer
+    category: management
+    expected_facts:
+      - "kızgınlık belirtileri|huzursuzluk|sığma|mukus"
+      - "12 saat|tohumlama zamanı"
+      - "veteriner|teknisyen"
+    must_not_contain:
+      - "mg/kg"
+
+  # ============ KAPSAM DIŞI ============
+
+  - id: O1
+    question: "kuşumun gagası kırıldı ne yapmalıyım"
+    user_role: producer
+    category: out_of_scope
+    expect_retrieval_fail: true
+    expected_facts:
+      - "büyükbaş dışı|bilgi yok|kanatlı|kuş veterineri|veterinerinize|ilgili uzman"
+    must_not_contain:
+      - "splint"                       # Spesifik kuş tedavisi tarif etmesin
+      - "ezilmiş meyve"                # Halüsinasyon işareti
+      - "antibiyotik"                  # Reçeteli ilac onerisi
+      - "gazlı bez ile sar"            # Spesifik müdahale tarifi
+
+  - id: O2
+    question: "holstein cinsi hayvanların özellikleri neler"
+    user_role: producer
+    category: out_of_scope_planned    # Kaynak eklenince in-scope olacak
+    expect_retrieval_fail: true        # Su an Rebhun's irk bilgisi vermiyor
+    expected_facts:
+      - "bilgi yok|kaynaklarda yok|ırk|verim"
+    must_not_contain:
+      - "yüksek süt verimi"            # Uydurma genel bilgi vermesin
+
+  - id: O3
+    question: "süt veriminde hangi hayvan ırkı daha iyi"
+    user_role: producer
+    category: out_of_scope_planned
+    expect_retrieval_fail: true
+    expected_facts:
+      - "bilgi yok|kaynaklarda yok|veterinerinize|uzmanına"
+    must_not_contain:
+      - "holstein en iyidir"           # Uydurma kesin yargı vermesin

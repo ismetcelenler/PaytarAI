@@ -1,0 +1,161 @@
+{
+  "summary": {
+    "n": 3,
+    "fact_coverage_avg": 0.778,
+    "fact_coverage_llm_avg": 0.667,
+    "forbidden_pass_rate": 1.0,
+    "retrieval_precision_avg": 1.0,
+    "retrieval_top_score_avg": 0.734,
+    "latency_sec_avg": 47.899,
+    "errors": 0,
+    "by_category": {
+      "producer_natural": {
+        "n": 3,
+        "fact_coverage_avg": 0.778,
+        "forbidden_pass_rate": 1.0,
+        "retrieval_precision_avg": 1.0
+      }
+    }
+  },
+  "results": [
+    {
+      "id": "P1",
+      "category": "producer_natural",
+      "user_role": "producer",
+      "question": "hayvanın memesi şişmiş",
+      "response": "🚨 ACİL: Eğer hayvanın gözü içeri kaçıyor, çok yüksek ateşi var, yem yemiyor ve tamamen hareketsizse hemen veteriner çağırın!\n\n**Yapılacaklar:**\n1. **Meme temizliği** – Ilık su ve temiz bir bezle memeyi nazikçe silin. Süt akıntısı varsa, temiz bir bezle hafifçe kurulayın. \n2. **Sıvı ve elektrolit desteği** – Yem bayisinden “elektrolit tozu” alın. Paketteki talimatlara göre ılık suyla karıştırın ve hayvanın bolca içmesini sağlayın. Süt vermeyi geçici olarak azaltın, böylece sindirim sistemi dinlensin. \n3. **Meme ortamını kuru ve temiz tutun** – Eski samanı atın, temiz ve kuru samanla değiştirin. Meme çevresine nemli bir örtü takmayın; nemli ortam bakteri üremesini artırır. \n4. **Sıcaklık ve konfor** – Hayvanı rüzgârsız, ılık bir yerde tutun. Soğuk havada ya da rüzgârlı alanlarda bırakmayın. \n5. **Veterinerle iletişim** – Durumu telefonla bildirin, gerekirse hayvanı hemen klinik ortama taşıyın. Veteriner, gerekirse antibiyotik ve kalsiyum tedavisi gibi iç tedavileri başlatacaktır.\n\n**Tehlike işaretleri (bu belirtiler görülürse ACİL):** \n- Gözlerin içeri kaçması (şiddetli su kaybı) \n- Hayvan tamamen hareketsiz, uyarılara yanıt vermiyorsa \n- Meme çevresinde şiddetli şişlik, kızarıklık ve sıcaklık artışı \n- Süt akıntısında kan veya çok kötü koku varsa \n- Ateş çok yüksek (özellikle buzağınızda 41 °C’nin üzerine çıkıyorsa) \n\n**Takip soruları:** \n- Hayvanınız kaç yaşında ve süt veriyor mu? \n- Şu ana kadar ateşi ölçtünüz mü? Ölçtüyse kaç derece? \n- Meme şişkinliğinin yanı sıra yem yemiyor mu, su içiyor mu? \n\nBu adımları uygularken hayvanı gözlemlemeye devam edin; durumun kötüleştiğini fark ederseniz hemen veterinerle iletişime geçin. \n\n⚠️ Bu bilgi karar desteğidir. Belirtiler kötüleşirse veya 24 saat içinde düzelmezse mutlaka veterinerinize danışın.",
+      "response_status": "accepted",
+      "critic_attempts": 1,
+      "active_model": "gpt-oss-120b (medium reasoning) @ Cerebras",
+      "evidence_confidence": "high",
+      "latency_sec": 19.327,
+      "metrics": {
+        "fact_coverage": {
+          "matched": [
+            "veteriner"
+          ],
+          "missed": [
+            "meme iltihabı|meme sorunu|mastitis",
+            "sağım|hijyen"
+          ],
+          "score": 0.333
+        },
+        "fact_coverage_llm": {
+          "matched": [
+            "veteriner"
+          ],
+          "missed": [
+            "meme iltihabı|meme sorunu|mastitis",
+            "sağım|hijyen"
+          ],
+          "score": 0.333,
+          "method": "llm_judge"
+        },
+        "forbidden_check": {
+          "violations": [],
+          "passed": true
+        },
+        "retrieval_precision": {
+          "mode": "threshold",
+          "top_k": 3,
+          "found_sources": [],
+          "missing_sources": [],
+          "score": 1.0,
+          "top_score": 0.781
+        }
+      },
+      "error": null
+    },
+    {
+      "id": "P2",
+      "category": "producer_natural",
+      "user_role": "producer",
+      "question": "ineğim topallıyor ne yapym",
+      "response": "🚨 ACİL: Eğer inek ayakta duramıyor, gözleri çukurlaşmışsa, nefesi çok hızlı ve yüzü soluklaşmışsa hemen veteriner çağırın!\n\n**Yapacaklar:**\n1. **Yatağı temiz ve kuru tut** – İneğin yatak halini temiz samanla değiştirin, ıslaklık ve çamurdan uzak tutun. Soğuk havada rüzgâr almamasına dikkat edin. \n2. **İneği rahat bir yere koy** – Sığ, kaymaz bir zeminde, duvar ya da çit gibi destekli bir alanda tutun. Çoğu zaman topallama, ayakların kayması ya da dengesiz zeminden kaynaklanır. \n3. **İneğin ayak ve eklemlerini kontrol et** – Ayak tabanında yara, çürüme, şişlik, çivi ya da taş gibi yabancı maddeler var mı bakın. Şüpheli bir şey görürseniz temiz su ve hafif sabunla yumuşak bir bezle silin, ardından temiz bir bezle kurulayın. \n4. **Sıvı ve elektrolit desteği** – Yem bayisinden “elektrolit tozu” alın. Paketteki talimatlara göre ılık suyla karıştırıp, inek su içebiliyorsa sık sık (örneğin her iki‑üç saatte bir) içmesini sağlayın. Süt vermeyi bir iki gün azaltıp, sadece su ve elektrolit çözeltisi vermek topallamayı hafifletebilir. \n5. **Veterinerle iletişime geç** – Topallama bir ya da iki günden uzun sürerse, ayakta şişlik, kızarıklık, sıcaklık artışı ya da yürürken ağrı belirtileri varsa, veterinerin müdahalesi gerekir. Veteriner gerekirse antibiyotik, ağrı kesici ya da ayak tedavisi (örneğin yara temizliği, bandaj) önerebilir.\n\n**Dikkat edilmesi gereken tehlike işaretleri (vet’e git):**\n- 24 saat içinde topallama geçmez ya da kötüleşir. \n- Ayakta şişlik, kızarıklık, sıcaklık artışı, yara ya da kan görülür. \n- İnek ayakta duramıyor, tamamen yatıyor ve uyanmıyorsa. \n- Nefesi çok hızlı, yüzü soluk ya da gözleri çukurlaşmışsa. \n- İnek su içmeyi reddediyor ve susuz kalıyorsa.\n\n**Sormam gereken birkaç soru:**\n- Topallama ne kadar süredir devam ediyor? \n- Ayakta bir şişlik, yara ya da kızarıklık var mı? \n- İnek ateşli mi (vücudunun sıcaklığı normal mi)? \n- İnek su içiyor mu, iştahı nasıl?\n\nBu adımları uyguladıktan sonra durumun nasıl değiştiğini bana da bildirin, gerekirse daha detaylı önerilerde bulunabilirim. \n\n⚠️ Bu bilgi karar desteğidir. Belirtiler kötüleşirse veya 24 saatte düzelmezse mutlaka veterinerinize danışın.",
+      "response_status": "accepted_after_max_retries",
+      "critic_attempts": 2,
+      "active_model": "gpt-oss-120b (medium reasoning) @ Cerebras",
+      "evidence_confidence": "medium",
+      "latency_sec": 65.3,
+      "metrics": {
+        "fact_coverage": {
+          "matched": [
+            "tırnak|ayak|eklem",
+            "veteriner"
+          ],
+          "missed": [],
+          "score": 1.0
+        },
+        "fact_coverage_llm": {
+          "matched": [
+            "tırnak|ayak|eklem",
+            "veteriner"
+          ],
+          "missed": [],
+          "score": 1.0,
+          "method": "llm_judge"
+        },
+        "forbidden_check": {
+          "violations": [],
+          "passed": true
+        },
+        "retrieval_precision": {
+          "mode": "threshold",
+          "top_k": 3,
+          "found_sources": [],
+          "missing_sources": [],
+          "score": 1.0,
+          "top_score": 0.682
+        }
+      },
+      "error": null
+    },
+    {
+      "id": "P3",
+      "category": "producer_natural",
+      "user_role": "producer",
+      "question": "buzağı yem yemiyor neden",
+      "response": "🚨 ACİL: Eğer buzağınız ayakta duramıyor, gözleri çukurlaşmışsa, dışkısında kan varsa ya da 12 saat içinde iyileşme göstermiyorsa hemen bir veteriner çağırın! \n\n**Yapacaklar:** \n1. **Sıvı ve elektrolit desteği** – Yem bayisinden “elektrolit tozu” alın. 1 litre ılık suya karıştırıp, buzağınıza sık sık (günde birkaç kez) içirin. Süt vermeyi geçici olarak azaltın, böylece mide‑bağırsak sistemi dinlensin. \n2. **Sıcak ve kuru ortam** – Yatağını temiz, kuru samanla değiştirin. Üzerine ince bir battaniye ya da eski bir örtü sererek ılık tutun; rüzgâr ve soğuktan koruyun. \n3. **Meme ve ağız hijyeni** – Meme uçlarını ılık su ve temiz bir bezle nazikçe temizleyin. Ağız içinde yara varsa, hafif bir povidon iyot çözeltisiyle yıkayıp durulayın. \n4. **Beslenme düzeni** – Süt yerine yumuşak, sindirimi kolay yem (örneğin ezilmiş mısır unu ya da yulaf ezmesi) verin. Yem miktarını az tutup sık sık (günde birkaç kez) vererek mideyi yormamaya çalışın. \n5. **Gözlem ve kayıt** – Her 4‑6 saatte bir ateş ölçün (normal 38‑39 °C). Dışkı rengini, kıvamını, su tüketimini ve hareket hâlini not edin. \n\n**Tehlike işaretleri (vet çağırmanız gereken durumlar):** \n- 12 saat içinde iştah ve hareket hâli düzelmezse. \n- Dışkıda kan, çok kötü koku ya da çok sulu dışkı görülürse. \n- Buzağınız ayakta duramıyor, yürüyemiyor ya da gözleri çukurlaşıyor. \n- Ateşi 39 °C’nin üzerine çıkarsa ve 1 saatten uzun sürede düşmezse. \n\n**Sormam gereken birkaç soru:** \n- Buzağınız kaç gündür yem yemiyor? \n- Şu an ateşi var mı, varsa kaç derece? \n- Dışkısının rengi ve kıvamı nasıl? \n\nBu adımları uygularken, ilaç vermek ya da enjeksiyon yapmak gibi veterinerin yapması gereken işlemlerden kaçının. \n\n⚠️ Bu bilgi karar desteğidir. Belirtiler kötüleşirse veya 24 saat içinde düzelmezse mutlaka veterinerinize danışın.",
+      "response_status": "accepted_after_max_retries",
+      "critic_attempts": 2,
+      "active_model": "gpt-oss-120b (medium reasoning) @ Cerebras",
+      "evidence_confidence": "medium",
+      "latency_sec": 59.07,
+      "metrics": {
+        "fact_coverage": {
+          "matched": [
+            "iştah|iştahsızlık",
+            "ateş|dışkı|kaç gün|yaş",
+            "veteriner"
+          ],
+          "missed": [],
+          "score": 1.0
+        },
+        "fact_coverage_llm": {
+          "matched": [
+            "ateş|dışkı|kaç gün|yaş",
+            "veteriner"
+          ],
+          "missed": [
+            "iştah|iştahsızlık"
+          ],
+          "score": 0.667,
+          "method": "llm_judge"
+        },
+        "forbidden_check": {
+          "violations": [],
+          "passed": true
+        },
+        "retrieval_precision": {
+          "mode": "threshold",
+          "top_k": 3,
+          "found_sources": [],
+          "missing_sources": [],
+          "score": 1.0,
+          "top_score": 0.738
+        }
+      },
+      "error": null
+    }
+  ]
+}

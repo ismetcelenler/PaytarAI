@@ -1,0 +1,68 @@
+{
+  "summary": {
+    "n": 1,
+    "fact_coverage_avg": 1.0,
+    "fact_coverage_llm_avg": 1.0,
+    "forbidden_pass_rate": 1.0,
+    "retrieval_precision_avg": 1.0,
+    "retrieval_top_score_avg": 0.516,
+    "latency_sec_avg": 3.678,
+    "errors": 0,
+    "by_category": {
+      "producer_natural": {
+        "n": 1,
+        "fact_coverage_avg": 1.0,
+        "forbidden_pass_rate": 1.0,
+        "retrieval_precision_avg": 1.0
+      }
+    }
+  },
+  "results": [
+    {
+      "id": "P1",
+      "category": "producer_natural",
+      "user_role": "producer",
+      "question": "hayvanın memesi şişmiş",
+      "response": "Memenin şişmesi genellikle bir “meme iltihabı”nın işareti olur. Bakteriler ya da yaralanma nedeniyle memeye iltihap girebilir; bu da şişlik, sıcaklık artışı ve süt akışında bozulmaya yol açar. Özellikle yeni doğum yapmış ya da sık sık sağım yapılan hayvanlarda bu durum daha sık görülür.\n\nŞişkinliğin yanında memenin sıcak, ağrılı ve bazen içinde irin gibi bir sıvı birikmesi de olabilir. Süt miktarı azalır, süt içinde renk değişikliği ya da koku farkı duyulabilir. Hayvanın ateşi yükselmişse (38 °C’nin üzeri) ve genel hali halsizse, durumun ciddiyetini artırır.\n\nBu aşamada şunları yapabilirsiniz:\n\n- Hayvanı diğerlerinden ayırıp temiz bir alana koyun; bulaşmayı önlemek için teması sınırlayın. \n- Memeyi ılık (yaklaşık 38 °C) suyla hafifçe yıkayın ve temiz bir bezle kurulayın. \n- Sıcak, nemli bir bezle (örneğin ılık suyla ıslatılmış) memeye 10‑15 dakika uygulayın; bu, iltihabın hafiflemesine yardımcı olur. \n- Süt vermeyi geçici olarak durdurun ve veterinerin gelmesini bekleyin; veteriner gerekirse antibiyotik ve sıvı tedavisi başlatabilir.\n\nMeme iltihabı erken müdahale edilmezse hayvanın genel sağlığını etkileyebilir ve süt verimini azaltır. Veterinerinizin yönlendirmesiyle uygun tedavi uygulanması en güvenli yoldur.\n\n⚠️ Bu bilgi karar desteğidir. Uygulamadan önce mutlaka bir veteriner hekime danışın.",
+      "response_status": "accepted",
+      "critic_attempts": 0,
+      "active_model": "gpt-oss-120b (high) @ Cerebras",
+      "evidence_confidence": "high",
+      "latency_sec": 3.678,
+      "metrics": {
+        "fact_coverage": {
+          "matched": [
+            "meme iltihabı|meme sorunu|mastitis",
+            "veteriner",
+            "sağım|hijyen"
+          ],
+          "missed": [],
+          "score": 1.0
+        },
+        "fact_coverage_llm": {
+          "matched": [
+            "meme iltihabı|meme sorunu|mastitis",
+            "veteriner",
+            "sağım|hijyen"
+          ],
+          "missed": [],
+          "score": 1.0,
+          "method": "llm_judge"
+        },
+        "forbidden_check": {
+          "violations": [],
+          "passed": true
+        },
+        "retrieval_precision": {
+          "mode": "threshold",
+          "top_k": 3,
+          "found_sources": [],
+          "missing_sources": [],
+          "score": 1.0,
+          "top_score": 0.516
+        }
+      },
+      "error": null
+    }
+  ]
+}

@@ -47,7 +47,6 @@ def retriever_node(state: dict) -> dict:
     # Son kullanici mesajini al
     last_user_msg = ""
     for msg in reversed(messages):
-        print(f"DEBUG MSG TYPE: {type(msg)} | VALUE: {msg}")
         if isinstance(msg, dict) and msg.get("role") == "user":
             last_user_msg = msg.get("content", "")
             break

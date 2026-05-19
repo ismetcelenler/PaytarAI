@@ -1,0 +1,132 @@
+{
+  "summary": {
+    "n": 3,
+    "fact_coverage_avg": 0.778,
+    "forbidden_pass_rate": 0.667,
+    "retrieval_precision_avg": 1.0,
+    "retrieval_top_score_avg": 0.594,
+    "latency_sec_avg": 6.927,
+    "errors": 0,
+    "by_category": {
+      "producer_natural": {
+        "n": 3,
+        "fact_coverage_avg": 0.778,
+        "forbidden_pass_rate": 0.667,
+        "retrieval_precision_avg": 1.0
+      }
+    }
+  },
+  "results": [
+    {
+      "id": "P1",
+      "category": "producer_natural",
+      "user_role": "producer",
+      "question": "hayvanın memesi şişmiş",
+      "response": "Ilgili kaynak bilgileri:\n\n1. Such regrowth explains clinical experience with relapses after apparent cures. Furthermore, S. aureus commonly acquires resistance to antibiotics. Incomplete killing of the bacterium by penicillin and cephalosporin drugs may give rise to L-forms, which regrow after cessation of antibiotic therapy. L-forms are cell wall-deficient variants that may not grow on standard culture media. Phagocytes do not provide effective defenses against L-forms. Freezing and thawing of milk samples may allow impr...\n\n2. Delaying collection of milk for culture or previous treatment further contributes to negative cultures. Freezing of milk samples may increase the sensitivity of bacteriologic culturing by releasing bacteria that are engulfed in phagocytes that would have been killed normally in vivo. Cattle can spontaneously clear intramammary coliform infection as early as 10 days post-infection; however, some chronic infections do occur. The role of host (cow) factors in deciding whether or not a cow will...\n\n3. Contaminated udder infusion vials, cannulas, or syringes, are other common sources of Pseudomonas spp. Filthy environments and lack of udder preparation may predispose to mastitis due to Pseudomonas spp. as well. Although sporadic infection from Pseudomonas spp. is possible because of poor management and milking procedures, herd epidemics usually have a point source that is often linked to contaminated water sources used in sanitizing milking systems or contaminated teat dip. Se...\n\nBu bilgi karar destegidir. Uygulamadan once mutlaka bir veteriner hekime danisin.",
+      "response_status": "accepted",
+      "critic_attempts": 1,
+      "active_model": "fallback",
+      "evidence_confidence": "high",
+      "latency_sec": 12.735,
+      "metrics": {
+        "fact_coverage": {
+          "matched": [
+            "meme iltihabı|meme sorunu|mastitis",
+            "veteriner"
+          ],
+          "missed": [
+            "sağım|hijyen"
+          ],
+          "score": 0.667
+        },
+        "forbidden_check": {
+          "violations": [
+            "intramammary"
+          ],
+          "passed": false
+        },
+        "retrieval_precision": {
+          "mode": "threshold",
+          "top_k": 3,
+          "found_sources": [],
+          "missing_sources": [],
+          "score": 1.0,
+          "top_score": 0.592
+        }
+      },
+      "error": null
+    },
+    {
+      "id": "P2",
+      "category": "producer_natural",
+      "user_role": "producer",
+      "question": "ineğim topallıyor ne yapym",
+      "response": "Kaç gündür topallıyor? \nAteşi var mı, yemini ve suyunu alıyor mu? \nAyaklarında bir yara, şişlik ya da kötü koku fark ettiniz mi? \n\n⚠️ Bu bilgi karar desteğidir. Uygulamadan önce mutlaka bir veteriner hekime danışın.",
+      "response_status": "accepted",
+      "critic_attempts": 0,
+      "active_model": "openai/gpt-oss-120b",
+      "evidence_confidence": "high",
+      "latency_sec": 4.247,
+      "metrics": {
+        "fact_coverage": {
+          "matched": [
+            "tırnak|ayak|eklem",
+            "veteriner"
+          ],
+          "missed": [],
+          "score": 1.0
+        },
+        "forbidden_check": {
+          "violations": [],
+          "passed": true
+        },
+        "retrieval_precision": {
+          "mode": "threshold",
+          "top_k": 3,
+          "found_sources": [],
+          "missing_sources": [],
+          "score": 1.0,
+          "top_score": 0.543
+        }
+      },
+      "error": null
+    },
+    {
+      "id": "P3",
+      "category": "producer_natural",
+      "user_role": "producer",
+      "question": "buzağı yem yemiyor neden",
+      "response": "Buzağınız kaç gündür yem yemiyor? \nAteşi var mı, su içiyor mu? \n\n⚠️ Bu bilgi karar desteğidir. Uygulamadan önce mutlaka bir veteriner hekime danışın.",
+      "response_status": "accepted",
+      "critic_attempts": 0,
+      "active_model": "openai/gpt-oss-120b",
+      "evidence_confidence": "high",
+      "latency_sec": 3.798,
+      "metrics": {
+        "fact_coverage": {
+          "matched": [
+            "ateş|dışkı|kaç gün|yaş",
+            "veteriner"
+          ],
+          "missed": [
+            "iştah|iştahsızlık"
+          ],
+          "score": 0.667
+        },
+        "forbidden_check": {
+          "violations": [],
+          "passed": true
+        },
+        "retrieval_precision": {
+          "mode": "threshold",
+          "top_k": 3,
+          "found_sources": [],
+          "missing_sources": [],
+          "score": 1.0,
+          "top_score": 0.647
+        }
+      },
+      "error": null
+    }
+  ]
+}

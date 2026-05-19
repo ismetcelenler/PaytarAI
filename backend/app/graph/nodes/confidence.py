@@ -3,9 +3,30 @@ PaytarAI — Confidence Scorer Node
 
 Yanit guven skorunu belirler.
 AI-PROMPT.md Section 4.6: high / medium / low / insufficient.
+
+YENI (Phase 0): Confidence threshold gate
+- Eger top_sim < INSUFFICIENT_THRESHOLD ise generator yanitini KULLANMAYIZ,
+  sabit template ile degistiririz. Bu kaynaki yetersiz konularda halusinasyonu
+  onler (orn. Holstein irk bilgisi gibi kaynaklarda zayif olan konular).
 """
 
 from app.graph.audit import audit_log
+
+
+INSUFFICIENT_THRESHOLD = 0.60  # BGE-M3 sonrasi kalibre (eski deger 0.45 idi).
+# In-scope sorularda min top_sim ~0.67, out-of-scope (Holstein gibi) ~0.54.
+# 0.60 esigi ikisini ayirir, halusinasyonu engeller.
+
+LOW_CONFIDENCE_TEMPLATE_PRODUCER = (
+    "Bu konuda kaynaklarımda yeterli bilgi bulamadım. "
+    "Lütfen veterinerinize danışın.\n\n"
+    "⚠️ Sistem yalnızca kaynaklarımda olan büyükbaş hayvan konularında bilgi verebilir."
+)
+
+LOW_CONFIDENCE_TEMPLATE_VET = (
+    "Bu konuda elimdeki kaynaklarda güvenilir bir bilgi bulamadım, "
+    "farklı bir kaynak incelemenizi öneririm."
+)
 
 
 def confidence_node(state: dict) -> dict:
@@ -21,6 +42,28 @@ def confidence_node(state: dict) -> dict:
     attempts = state.get("critic_attempts", 0)
     status = state.get("response_status", "ok")
     docs = state.get("retrieved_docs", [])
+    user_role = state.get("user_role", "producer")
+
+    # === PHASE 0 GATE: scope_check zaten template koyduysa devam etme ===
+    if status == "out_of_scope":
+        state["evidence_confidence"] = "insufficient"
+        # final_response zaten set edilmis
+        audit_log(state, "confidence_skip_oos", reason="scope_check out_of_scope")
+        return state
+
+    # === PHASE 0 GATE: dusuk similarity ise generator yanitini ezip template ver ===
+    if similarity < INSUFFICIENT_THRESHOLD and similarity > 0:
+        template = LOW_CONFIDENCE_TEMPLATE_PRODUCER if user_role == "producer" else LOW_CONFIDENCE_TEMPLATE_VET
+        state["final_response"] = template
+        state["draft_response"] = template
+        state["evidence_confidence"] = "insufficient"
+        state["response_status"] = "insufficient_evidence"
+        audit_log(
+            state,
+            "confidence_low_sim_gate",
+            reason=f"top_sim={similarity:.3f} < threshold={INSUFFICIENT_THRESHOLD}, template fallback",
+        )
+        return state
 
     # Skor hesapla
     score = 0

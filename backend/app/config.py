@@ -23,13 +23,16 @@ class Settings(BaseSettings):
     # ----- OpenAI (Whisper + Embeddings) -----
     openai_api_key: str = ""
 
-    # ----- Groq (Llama 3.3 70B) -----
+    # ----- Groq (Llama 3.3 70B — compress node) -----
     groq_api_key: str = ""
+
+    # ----- Cerebras (gpt-oss-120b high reasoning — generator + enrich_query) -----
+    cerebras_api_key: str = ""
 
     # ----- Qdrant Cloud -----
     qdrant_url: str = ""
     qdrant_api_key: str = ""
-    qdrant_collection_name: str = "paytar_veterinary"
+    qdrant_collection_name: str = "paytar_veterinary_bge"  # Phase 1: BGE-M3 koleksiyon
 
     # ----- Database -----
     database_url: str = "sqlite:///./paytar.db"

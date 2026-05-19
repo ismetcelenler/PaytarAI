@@ -1,0 +1,129 @@
+{
+  "summary": {
+    "n": 3,
+    "fact_coverage_avg": 0.889,
+    "forbidden_pass_rate": 1.0,
+    "retrieval_precision_avg": 1.0,
+    "retrieval_top_score_avg": 0.583,
+    "latency_sec_avg": 9.471,
+    "errors": 0,
+    "by_category": {
+      "producer_natural": {
+        "n": 3,
+        "fact_coverage_avg": 0.889,
+        "forbidden_pass_rate": 1.0,
+        "retrieval_precision_avg": 1.0
+      }
+    }
+  },
+  "results": [
+    {
+      "id": "P1",
+      "category": "producer_natural",
+      "user_role": "producer",
+      "question": "hayvanın memesi şişmiş",
+      "response": "Memenin şişmesi genellikle **meme iltihabı** (süt kanalı enfeksiyonu) nedeniyle olur. Bu durum, bakterilerin memeye girmesiyle iltihap ve şişlik gelişir; hayvan ağrılı olabilir ve süt akışı bozulur.\n\nŞişkinliğin yanında memenin sıcak, sert ve dokunulduğunda acı verip vermediğine bakın. Sütte kan, pıhtı ya da anormal bir renk görülüyorsa durum daha ciddi olabilir. Ayrıca hayvanın yem yemeyi bırakması, iştahsızlık ya da ateş (38 °C’nin üzeri) göstermesi de dikkat edilmesi gereken işaretlerdir.\n\n**Yapılacaklar**\n- Hayvanı temiz, kuru bir alana alın ve memeyi nazikçe temiz suyla yıkayın. \n- Sütü hemen sağın; temiz bir kapta toplayıp saklamayın, sadece geçici olarak boşaltın. \n- Diğer hayvanlardan izole edin, özellikle sağım ekipmanını (örnekleme kovası, pompa vb.) iyice dezenfekte edin. \n- Veteriner gelene kadar memeyi hafifçe masaj yaparak kan dolaşımını artırmaya çalışın, fakat çok sert bastırmayın.\n\nMeme iltihabı hızlı ilerleyebilir ve tedavi edilmezse hayvanın süt verimi kalıcı olarak azalabilir. Bu yüzden bir veterinerin görmesi en güvenli yoldur; veteriner gerekli kültür ve tedavi planını belirleyecektir.\n\n⚠️ Bu bilgi karar desteğidir. Uygulamadan önce mutlaka bir veteriner hekime danışın.",
+      "response_status": "accepted",
+      "critic_attempts": 0,
+      "active_model": "openai/gpt-oss-120b",
+      "evidence_confidence": "high",
+      "latency_sec": 19.787,
+      "metrics": {
+        "fact_coverage": {
+          "matched": [
+            "meme iltihabı|meme sorunu|mastitis",
+            "veteriner",
+            "sağım|hijyen"
+          ],
+          "missed": [],
+          "score": 1.0
+        },
+        "forbidden_check": {
+          "violations": [],
+          "passed": true
+        },
+        "retrieval_precision": {
+          "mode": "threshold",
+          "top_k": 3,
+          "found_sources": [],
+          "missing_sources": [],
+          "score": 1.0,
+          "top_score": 0.516
+        }
+      },
+      "error": null
+    },
+    {
+      "id": "P2",
+      "category": "producer_natural",
+      "user_role": "producer",
+      "question": "ineğim topallıyor ne yapym",
+      "response": "Ilgili kaynak bilgileri:\n\n1. Tablo 14.1: Sığırlarda ağız, meme ve ayakların derisini ve mukozasını etkileyen viral enfeksiyonların klinik işaretleri | Geyikgillerin kanamalı hastalığı | + | ++ | + | + | + | ++ | + | + | + | ++ | - | |\n|------------------------------------|------------------|----------------|-----|---------------|---------------------|------...\n\n2. Sağından kuşatılmış küçük bir kesecik (ok) tahribata başlamış: 1 ml kesecik sıvısı yaklaşık 10 milyon civarında canlı virüs parçası taşır. | 88 |\n| Foto 10.4: | Üst dudağın iç yüzeyinde oluşmuş aft (ok). 1 gram kesecik boşluğunun 100 milyon ile 1 milyar arası virüs taşıması bu hastalığın ne kadar bulaşıcı olduğunu gösterir. | 88 |\n| Foto 10.5: ...\n\n3. | 11 | Stomatitis papulosa | |\n|--------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-----|\n| Foto 11.1: | Burun ucu, üst dudak ve damakta kırmızı kabarcıklar. başlangıcına ö...\n\nBu bilgi karar destegidir. Uygulamadan once mutlaka bir veteriner hekime danisin.",
+      "response_status": "accepted",
+      "critic_attempts": 0,
+      "active_model": "fallback",
+      "evidence_confidence": "high",
+      "latency_sec": 4.862,
+      "metrics": {
+        "fact_coverage": {
+          "matched": [
+            "tırnak|ayak|eklem",
+            "veteriner"
+          ],
+          "missed": [],
+          "score": 1.0
+        },
+        "forbidden_check": {
+          "violations": [],
+          "passed": true
+        },
+        "retrieval_precision": {
+          "mode": "threshold",
+          "top_k": 3,
+          "found_sources": [],
+          "missing_sources": [],
+          "score": 1.0,
+          "top_score": 0.572
+        }
+      },
+      "error": null
+    },
+    {
+      "id": "P3",
+      "category": "producer_natural",
+      "user_role": "producer",
+      "question": "buzağı yem yemiyor neden",
+      "response": "Buzağınızın yem yememesinin ne kadar sürdüğünü ve başka belirtilerini öğrenmem gerekiyor.\n\n- Kaç gündür yem yemiyor? \n- Ateşi var mı, soluk alışı hızlı mı? \n- Su içiyor mu, hareket ediyor mu?\n\n⚠️ Bu bilgi karar desteğidir. Uygulamadan önce mutlaka bir veteriner hekime danışın.",
+      "response_status": "accepted",
+      "critic_attempts": 0,
+      "active_model": "openai/gpt-oss-120b",
+      "evidence_confidence": "high",
+      "latency_sec": 3.765,
+      "metrics": {
+        "fact_coverage": {
+          "matched": [
+            "ateş|dışkı|kaç gün|yaş",
+            "veteriner"
+          ],
+          "missed": [
+            "iştah|iştahsızlık"
+          ],
+          "score": 0.667
+        },
+        "forbidden_check": {
+          "violations": [],
+          "passed": true
+        },
+        "retrieval_precision": {
+          "mode": "threshold",
+          "top_k": 3,
+          "found_sources": [],
+          "missing_sources": [],
+          "score": 1.0,
+          "top_score": 0.66
+        }
+      },
+      "error": null
+    }
+  ]
+}
