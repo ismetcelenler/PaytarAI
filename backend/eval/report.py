@@ -17,7 +17,6 @@ def write_markdown_report(out_path: Path, summary: dict, results: list[dict], da
     lines.append("| Metrik | Deger |")
     lines.append("|---|---|")
     lines.append(f"| Fact coverage — string match (avg) | {summary.get('fact_coverage_avg', 0):.3f} |")
-    lines.append(f"| **Fact coverage — LLM judge (avg)** | **{summary.get('fact_coverage_llm_avg', 0):.3f}** |")
     lines.append(f"| Forbidden pass rate | **{summary.get('forbidden_pass_rate', 0):.3f}** |")
     lines.append(f"| Retrieval precision (top-3 avg) | **{summary.get('retrieval_precision_avg', 0):.3f}** |")
     lines.append(f"| Avg top similarity score | {summary.get('retrieval_top_score_avg', 0):.3f} |")
@@ -28,11 +27,11 @@ def write_markdown_report(out_path: Path, summary: dict, results: list[dict], da
     if cat:
         lines.append("## Kategori Kirilimi")
         lines.append("")
-        lines.append("| Kategori | N | Fact (LLM) | Forbidden | Retrieval | Top sim |")
+        lines.append("| Kategori | N | Fact (str) | Forbidden | Retrieval | Top sim |")
         lines.append("|---|---|---|---|---|---|")
         for name, c in sorted(cat.items()):
             lines.append(
-                f"| {name} | {c['n']} | {c.get('fact_coverage_llm_avg', 0):.2f} | "
+                f"| {name} | {c['n']} | {c.get('fact_coverage_avg', 0):.2f} | "
                 f"{c['forbidden_pass_rate']:.2f} | {c['retrieval_precision_avg']:.2f} | "
                 f"{c.get('top_sim_avg', 0):.2f} |"
             )
@@ -43,26 +42,26 @@ def write_markdown_report(out_path: Path, summary: dict, results: list[dict], da
     if style and any(s != "unknown" for s in style):
         lines.append("## Yazim Stili Kirilimi (Robustness)")
         lines.append("")
-        lines.append("| Stil | N | Fact (LLM) | Forbidden | Retrieval | Top sim |")
+        lines.append("| Stil | N | Fact (str) | Forbidden | Retrieval | Top sim |")
         lines.append("|---|---|---|---|---|---|")
         for st in ("clean", "mid", "broken", "unknown"):
             if st in style:
                 c = style[st]
                 lines.append(
-                    f"| **{st}** | {c['n']} | {c.get('fact_coverage_llm_avg', 0):.2f} | "
+                    f"| **{st}** | {c['n']} | {c.get('fact_coverage_avg', 0):.2f} | "
                     f"{c.get('forbidden_pass_rate', 0):.2f} | {c.get('retrieval_precision_avg', 0):.2f} | "
                     f"{c.get('top_sim_avg', 0):.2f} |"
                 )
         gap = summary.get("robustness_gap_clean_vs_broken")
         if gap is not None:
             lines.append("")
-            lines.append(f"**Robustness gap (clean - broken):** `{gap:+.3f}`")
+            lines.append(f"**Robustness gap top_sim (clean - broken):** `{gap:+.3f}`")
             if abs(gap) < 0.05:
-                lines.append("→ Sistem yazim gurultusune dayanikli (gap < 0.05)")
+                lines.append("Sistem yazim gurultusune dayanikli (gap < 0.05)")
             elif gap > 0.15:
-                lines.append("→ Sistem temiz yazimda belirgin daha iyi (gap > 0.15) — embedder/retrieval iyilestirme aday")
+                lines.append("Sistem temiz yazimda belirgin daha iyi (gap > 0.15) — embedder/retrieval iyilestirme aday")
             else:
-                lines.append("→ Orta seviye dayaniklilik")
+                lines.append("Orta seviye dayaniklilik")
         lines.append("")
 
     lines.append("## Case Detaylari")
@@ -77,17 +76,13 @@ def write_markdown_report(out_path: Path, summary: dict, results: list[dict], da
         lines.append("")
         lines.append(f"**Soru:** {r['question']}")
         lines.append("")
+        fact_ok = "OK" if m["fact_coverage"]["score"] >= 0.66 else "ZAYIF"
         lines.append(
-            f"- Fact (string): {m['fact_coverage']['score']:.2f} "
+            f"- **Fact (string): {m['fact_coverage']['score']:.2f} [{fact_ok}]** "
             f"(matched {len(m['fact_coverage']['matched'])}/{len(m['fact_coverage']['matched']) + len(m['fact_coverage']['missed'])})"
         )
-        llm_ok = "OK" if m["fact_coverage_llm"]["score"] >= 0.66 else "ZAYIF"
-        lines.append(
-            f"- **Fact (LLM judge): {m['fact_coverage_llm']['score']:.2f} [{llm_ok}]** "
-            f"(matched {len(m['fact_coverage_llm']['matched'])}/{len(m['fact_coverage_llm']['matched']) + len(m['fact_coverage_llm']['missed'])})"
-        )
-        if m["fact_coverage_llm"]["missed"]:
-            lines.append(f"   - LLM kacirdi: {m['fact_coverage_llm']['missed']}")
+        if m["fact_coverage"]["missed"]:
+            lines.append(f"   - Kacirdi: {m['fact_coverage']['missed']}")
         lines.append(f"- Forbidden: **[{forbidden_ok}]** — ihlal: {m['forbidden_check']['violations'] or '-'}")
         lines.append(
             f"- Retrieval: **{m['retrieval_precision']['score']:.2f}** [{retrieval_ok}] "
@@ -102,6 +97,22 @@ def write_markdown_report(out_path: Path, summary: dict, results: list[dict], da
         if r.get("error"):
             lines.append(f"- **ERROR:** {r['error']}")
         lines.append("")
+        chunks = r.get("retrieved_chunks") or []
+        if chunks:
+            lines.append("**Retrieved Chunks (top-5):**")
+            lines.append("")
+            lines.append("| # | Source | Lang | Dense | Rerank | Snippet |")
+            lines.append("|---|---|---|---|---|---|")
+            for c in chunks:
+                snippet = c["snippet"].replace("\n", " ").replace("|", "\\|")
+                if len(snippet) > 220:
+                    snippet = snippet[:220] + "..."
+                lines.append(
+                    f"| {c['rank']} | {c['source'][:32]} | {c['language']} | "
+                    f"{c['dense_score']:.3f} | {c['rerank_score']:.3f} | {snippet} |"
+                )
+            lines.append("")
+
         lines.append("**Yanit:**")
         lines.append("")
         lines.append("> " + (r["response"] or "(bos)").replace("\n", "\n> "))

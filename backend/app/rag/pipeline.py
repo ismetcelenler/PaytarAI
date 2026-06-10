@@ -7,7 +7,7 @@ Tam pipeline'i tek cagriyla calistirir.
 
 from pathlib import Path
 
-from app.rag.ingestion import parse_pdf, parse_all_documents
+from app.rag.ingestion import parse_pdf, parse_pdf_pymupdf, parse_all_documents
 from app.rag.chunking import semantic_chunk, simple_chunk, parent_child_chunk
 from app.rag.embeddings import embed_texts
 from app.rag.qdrant_store import ensure_collection, upsert_chunks, get_collection_info
@@ -19,6 +19,7 @@ def ingest_pdf(
     source_title: str | None = None,
     use_semantic: bool = True,
     use_parent_child: bool = False,
+    parser: str = "docling",
 ) -> dict:
     """
     Tek bir PDF'i parse edip Qdrant'a yukler.
@@ -27,6 +28,8 @@ def ingest_pdf(
         pdf_path: PDF dosya yolu
         source_title: Kaynak adi (None ise dosya adindan alinir)
         use_semantic: True ise semantic chunking, False ise simple chunking
+        parser: "docling" (default, EN icin) veya "pymupdf" (TR icin, Docling
+                Turkce karakterleri kelimeden ayiriyor bug'i)
 
     Returns:
         Islem sonucu istatistikleri
@@ -35,9 +38,14 @@ def ingest_pdf(
 
     # 1. Parse
     print(f"\n{'='*60}")
-    print(f"[Pipeline] PDF parse ediliyor: {pdf_path.name}")
+    print(f"[Pipeline] PDF parse ediliyor: {pdf_path.name} (parser={parser})")
     print(f"{'='*60}")
-    parsed = parse_pdf(pdf_path)
+    if parser == "pymupdf":
+        parsed = parse_pdf_pymupdf(pdf_path)
+    elif parser == "docling":
+        parsed = parse_pdf(pdf_path)
+    else:
+        raise ValueError(f"Bilinmeyen parser: {parser}. Kullan: 'docling' veya 'pymupdf'")
     print(f"  Sayfa: {parsed['pages']}, Karakter: {parsed['char_count']}, Tablo: {parsed['tables']}")
 
     # 2. Metin temizleme (gorsel placeholder, fazla bosluk vs.)

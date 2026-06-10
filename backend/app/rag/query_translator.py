@@ -38,13 +38,17 @@ def enrich_query(query: str) -> str | None:
         Cevrilmis metin veya None (hata durumunda)
     """
     try:
+        # NOT: gpt-oss-120b reasoning modeli. reasoning_effort="medium" + max_tokens=800
+        # konfigurasyonunda reasoning ~797 token harciyor, content icin 3 token kaliyor,
+        # finish_reason=length doniyor ve content BOS geliyor (enrich sessizce None doner).
+        # low + 2000 token: reasoning ~8 token, content 350+ token, FINISH=stop.
         llm = ChatOpenAI(
             api_key=settings.cerebras_api_key,
             base_url="https://api.cerebras.ai/v1",
             model="gpt-oss-120b",
             temperature=0,
-            max_tokens=800,
-            reasoning_effort="medium",  # type: ignore[call-arg]
+            max_tokens=2000,
+            reasoning_effort="low",  # type: ignore[call-arg]
         )
 
         prompt = ENRICHMENT_PROMPT.format(query=query)

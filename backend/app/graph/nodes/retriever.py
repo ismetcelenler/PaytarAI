@@ -1,14 +1,31 @@
 """
-PaytarAI — Retriever Node
+PaytarAI — Retriever Node (Phase 3: Hybrid Retrieval)
 
-Dual-language search: Sorguyu hem orijinal dilde hem cevrilmis dilde arar.
-Sonuclari birlestirip en yuksek skorlu olanlari alir.
+Cok kanalli retrieval (production medical RAG 2026 patterni):
+  1) Dense (BGE-M3) — orijinal sorgu
+  2) Dense — enriched keywords (TR+EN)
+  3) Dense — Multi-HyDE (3 hayali cevap varyanti)
+  4) Dense — Step-Back (genis kavramsal form)
+  5) BM25 (sparse) — orijinal sorgu, spesifik isim/jargon eslemesi icin
+  6) Cross-encoder reranker (BGE-reranker-v2-m3) — ince elek
+
+Reference: MEGA-RAG (PMC 2026), Multi-HyDE (arxiv 2509.16369),
+Step-Back (DeepMind 2024), Hybrid BM25+Dense 2026 production guide.
 """
 
 from app.rag.embeddings import embed_single
 from app.rag.qdrant_store import search
-from app.rag.query_translator import enrich_query, detect_language
+from app.rag.step_back import generate_step_back
+from app.rag.bm25_store import bm25_search
+from app.rag.reranker import rerank
 from app.graph.audit import audit_log
+
+
+# Dense retrieval'da kac chunk getirelim — reranker bunu top-3'e indirir.
+# 30 makul: yeterli aday ama reranker GPU latency hala sub-100ms.
+DENSE_TOP_N = 30
+BM25_TOP_N = 30
+RERANK_TOP_K = 3
 
 
 def _merge_results(results_a: list[dict], results_b: list[dict], limit: int = 5, threshold: float = 0.30) -> list[dict]:
@@ -20,7 +37,7 @@ def _merge_results(results_a: list[dict], results_b: list[dict], limit: int = 5,
         # Score threshold kontrolu (alakasiz kaynaklari filtrele)
         if r.get("score", 0) < threshold:
             continue
-            
+
         # Ilk 100 karakter ile dedup
         text_key = r["text"][:100]
         if text_key not in seen_texts:
@@ -28,6 +45,44 @@ def _merge_results(results_a: list[dict], results_b: list[dict], limit: int = 5,
             merged.append(r)
 
     merged.sort(key=lambda x: x["score"], reverse=True)
+    return merged[:limit]
+
+
+def _merge_bm25(dense_results: list[dict], bm25_results: list[dict], limit: int) -> list[dict]:
+    """
+    Dense ve BM25 sonuclarini RRF (Reciprocal Rank Fusion) ile birlestir.
+
+    RRF skor: 1 / (k + rank), k=60 (standart).
+    Aynı doc her iki kanalda da varsa skoru toplanir (rank uyumu).
+    Dedup ilk 100 char ile.
+
+    NOT: Chunk'in orijinal "score" field'i degistirilmez (dense cosine veya BM25 raw).
+    RRF skoru "_rrf_score" altinda saklanir, SADECE siralama icin kullanilir.
+    Bu sayede eval/generator chunk["score"]'u okudugunda dogal degerini gorur.
+    """
+    K = 60
+    seen_keys: dict[str, dict] = {}
+
+    for rank, r in enumerate(dense_results):
+        key = r["text"][:100]
+        rrf = 1.0 / (K + rank + 1)
+        seen_keys[key] = {**r, "_rrf_score": rrf}
+
+    for rank, r in enumerate(bm25_results):
+        key = r["text"][:100]
+        rrf = 1.0 / (K + rank + 1)
+        if key in seen_keys:
+            seen_keys[key]["_rrf_score"] += rrf
+        else:
+            # BM25-only chunk: raw BM25 skor 5-30 araliginda olur.
+            # Eval threshold (0.45) ve confidence gate (0.60) cosine'a kalibre.
+            # Normalize: clip(raw / 15, 0, 1). 15 ortalama-iyi BM25 skoru.
+            raw = float(r.get("score") or 0.0)
+            normalized = min(max(raw / 15.0, 0.0), 1.0)
+            seen_keys[key] = {**r, "_rrf_score": rrf, "score": normalized}
+
+    merged = list(seen_keys.values())
+    merged.sort(key=lambda x: x.get("_rrf_score", 0.0), reverse=True)
     return merged[:limit]
 
 
@@ -61,57 +116,134 @@ def retriever_node(state: dict) -> dict:
     user_role = state.get("user_role", "producer")
     filters = None
 
-    # --- 1. Orijinal dilde arama ---
+    # --- 1. Dense retrieval (top-N geniş ağ) — orijinal sorgu ---
     original_vector = embed_single(last_user_msg)
     original_results = search(
         query_vector=original_vector,
-        limit=5,
+        limit=DENSE_TOP_N,
         score_threshold=0.25,
         filters=filters,
     )
 
-    # --- 2. Zenginleştirilmiş (Enriched) Arama (Sorgu Genişletme) ---
-    enriched_query = enrich_query(last_user_msg)
-    translated_results = []
+    # --- 2 + 3. Multi-HyDE + Enriched keywords scope_check_node icinde TEK call ile uretildi.
+    # State'ten oku, ekstra LLM cagri yapma.
+    analysis = state.get("query_analysis") or {}
+    enriched_query = analysis.get("enriched_keywords", "") or ""
+    hyde_variants = analysis.get("hyde_variants", []) or []
 
+    translated_results = []
     if enriched_query:
         enriched_vector = embed_single(enriched_query)
         translated_results = search(
             query_vector=enriched_vector,
-            limit=5,
+            limit=DENSE_TOP_N,
             score_threshold=0.25,
             filters=filters,
         )
 
-    # --- 3. Sonuclari birlestir ---
-    merged = _merge_results(original_results, translated_results, limit=5)
+    hyde_results_all: list[dict] = []
+    for variant in hyde_variants:
+        vec = embed_single(variant)
+        hyde_results_all.extend(search(
+            query_vector=vec,
+            limit=DENSE_TOP_N,
+            score_threshold=0.25,
+            filters=filters,
+        ))
 
-    # Sadece en iyi 3 Parent Chunk'i gonder. Aksi halde LLM Token Limit'e takilir.
-    merged = merged[:3]
-    state["retrieved_docs"] = merged
+    # --- 4. Dense retrieval (top-N) — Step-Back (geniş kavramsal form) ---
+    # Spesifik sorudan geniş kavrama çıkıp komşu konuları yakalar.
+    step_back_query = generate_step_back(last_user_msg)
+    step_back_results = []
+    if step_back_query:
+        sb_vector = embed_single(step_back_query)
+        step_back_results = search(
+            query_vector=sb_vector,
+            limit=DENSE_TOP_N,
+            score_threshold=0.25,
+            filters=filters,
+        )
 
-    # En yuksek similarity score'u kaydet
-    if merged:
-        state["retrieval_similarity_score"] = merged[0]["score"]
-        if len(merged) >= 2:
-            score_diff = abs(merged[0]["score"] - merged[1]["score"])
-            state["source_agreement"] = score_diff < 0.15
+    # --- 5. BM25 sparse retrieval — spesifik isim/jargon eslemesi (Mortellaro vb) ---
+    bm25_results = []
+    try:
+        bm25_results = bm25_search(last_user_msg, limit=BM25_TOP_N)
+    except Exception as e:
+        print(f"[Retriever] BM25 atlandi: {e}")
+
+    # --- 6. Tum kanallari birlestir (dedup, threshold, sirala) ---
+    # Dense skorlarin (0-1 cosine) ve BM25 (raw skor) ayni listeye girince
+    # _merge_results threshold (0.30) sadece dense'e uygulanir; BM25 her zaman gecer.
+    # Cross-encoder rerank zaten final precision'i saglar.
+    merged = _merge_results(original_results, translated_results, limit=DENSE_TOP_N)
+    merged = _merge_results(merged, hyde_results_all, limit=DENSE_TOP_N)
+    merged = _merge_results(merged, step_back_results, limit=DENSE_TOP_N)
+
+    # Confidence gate icin ORIJINAL dense top skor (cosine) — RRF'den ONCE
+    all_dense = original_results + translated_results + hyde_results_all + step_back_results
+    dense_top_cosine = max(
+        (float(r.get("score") or 0.0) for r in all_dense),
+        default=0.0,
+    )
+
+    # BM25 sonuclarini threshold uygulamadan ekle (skor scale farkli)
+    candidates = _merge_bm25(merged, bm25_results, limit=DENSE_TOP_N + BM25_TOP_N)
+
+    # --- 5. Cross-encoder reranker (top-N -> top-K) ---
+    # Rerank query'sine TR sorgu + enriched (TR+EN) keywords birleştir.
+    # BGE-reranker-v2-m3 multilingual ama TR sorgu + EN chunk pair'inde
+    # logit'leri uniform negatif veriyor; enriched keywords (EN dahil)
+    # cross-encoder'in semantik eşlemesini düzeltir.
+    # NOT: HyDE metni rerank query'sine eklenmez — HyDE halusinasyonu rerank
+    # skorlarini saptirmasin diye kullanici sorusu + keyword'ler ile sinirli.
+    if candidates:
+        if enriched_query:
+            rerank_query = f"{last_user_msg} | {enriched_query}"
+        else:
+            rerank_query = last_user_msg
+        final_docs = rerank(rerank_query, candidates, top_k=RERANK_TOP_K)
+    else:
+        final_docs = []
+
+    state["retrieved_docs"] = final_docs
+
+    # Skorlama:
+    #   retrieval_similarity_score = DENSE COSINE top score (confidence gate icin)
+    #     - Reranker skoru sigmoid output (0-1), cosine'dan farkli — gate threshold
+    #       (0.60) cosine'a kalibre. Reranker skorunu buraya yazarsan gate bozulur.
+    #   rerank_top_score = reranker output (audit/log icin)
+    if final_docs:
+        rerank_top = float(final_docs[0].get("rerank_score") or 0.0)
+
+        # Confidence gate: ORIJINAL dense cosine skoru (RRF degil)
+        # RRF skoru 0.01-0.03 araliginda — gate threshold (0.60 cosine) ile uyumsuz
+        state["retrieval_similarity_score"] = dense_top_cosine
+        state["rerank_top_score"] = rerank_top  # yeni alan, audit/log icin
+
+        if len(final_docs) >= 2:
+            rerank_second = float(final_docs[1].get("rerank_score") or 0.0)
+            state["source_agreement"] = abs(rerank_top - rerank_second) < 0.15
         else:
             state["source_agreement"] = False
     else:
         state["retrieval_similarity_score"] = 0.0
+        state["rerank_top_score"] = 0.0
         state["source_agreement"] = False
 
     audit_log(
         state,
         "retrieval_done",
         reason=(
-            f"{len(merged)} docs (orig={len(original_results)}, "
-            f"enriched={len(translated_results)}), "
-            f"top_score={state['retrieval_similarity_score']:.4f}, "
-            f"enriched={'yes' if enriched_query else 'no'}"
+            f"candidates={len(candidates)} "
+            f"(orig={len(original_results)}, enriched={len(translated_results)}, "
+            f"hyde_variants={len(hyde_variants)} [{len(hyde_results_all)} chunks], "
+            f"step_back={'yes' if step_back_query else 'no'} [{len(step_back_results)} chunks], "
+            f"bm25={len(bm25_results)}), "
+            f"reranked_top_k={len(final_docs)}, "
+            f"dense_top={state['retrieval_similarity_score']:.4f}, "
+            f"rerank_top={state.get('rerank_top_score', 0.0):.4f}"
         ),
-        source_ids=[r["metadata"].get("source_title", "") for r in merged[:3]],
+        source_ids=[r["metadata"].get("source_title", "") for r in final_docs],
     )
 
     return state

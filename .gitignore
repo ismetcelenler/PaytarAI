@@ -92,3 +92,14 @@ backend/tests/test_db_scan.py
 backend/tests/extract_pdf.py
 backend/tests/qdrant_output.txt
 backend/tests/test_oksüruk*
+
+# ----- Eval reports & datasets (uretilen, repoyu sismeyecek) -----
+backend/eval/reports/
+backend/eval/datasets/*.yaml
+backend/eval/datasets/*.json
+backend/eval/datasets/*.md
+!backend/eval/datasets/README.md
+backend/eval/cache/
+
+# ----- Frontend design source (Claude Design ham ciktilari, repo'ya gerek yok) -----
+frontend.dev/

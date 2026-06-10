@@ -19,9 +19,15 @@ ZORUNLU KURALLAR:
 - Kaynak referansi ekle (kitap adi, bolum)
 - Turkce yaz
 
---- KAYNAKLAR ---
+--- KAYNAKLAR (SADECE BU METINLERI KULLAN) ---
 {sources}
 --- KAYNAKLAR SONU ---
+
+SON KONTROL: Yanit yazmadan once SPESIFIK iddia listeni (sayilar, isimler,
+patogenez detaylari, protokol adimlari) yukaridaki KAYNAKLAR metinlerinden
+DOGRUDAN veya yakin paraphrase olarak cikarilabildigini dogrula. Cikarilamayan
+spesifik iddiayi YAZMA — yerine genel kategori ifadesi kullan veya o noktayi
+atla. Genel klinik mantik, takip sorulari, sevk uyarisi kaynak gerekmez.
 
 Kullanici sorusu: {question}"""
 
@@ -36,9 +42,17 @@ ZORUNLU KURALLAR:
 - Sade Turkce ile yaz, tablo kullanma
 - Kaynak kelimesini bile yazma
 
---- KAYNAKLAR (sadece senin icin) ---
+--- KAYNAKLAR (sadece senin icin, SADECE BU METINLERI KULLAN) ---
 {sources}
 --- KAYNAKLAR SONU ---
+
+SON KONTROL: Yanit yazmadan once SPESIFIK iddia listeni (sayilar, ilac/marka
+adi, dozaj, satin alma yeri, belirli zaman/miktar adimlari) yukaridaki
+KAYNAKLAR metinlerinden DOGRUDAN cikarilabildigini dogrula. Cikarilamayan
+spesifik iddiayi YAZMA — yerine genel kategori ifadesi kullan ("veterinerin
+uygun gordugu tedavi", "veterinerin onerdigi miktarda") veya o noktayi atla.
+Genel oneri, kategori adi, tehlike isareti, gozlem talimati, hijyen onerisi
+kaynak gerekmez.
 
 Ciftcinin sorusu: {question}"""
 

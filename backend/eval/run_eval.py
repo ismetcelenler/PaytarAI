@@ -42,7 +42,6 @@ from eval.metrics.fact_coverage import fact_coverage  # noqa: E402
 from eval.metrics.forbidden import must_not_contain  # noqa: E402
 from eval.metrics.retrieval import retrieval_precision  # noqa: E402
 from eval.metrics.latency import latency_seconds  # noqa: E402
-from eval.metrics.llm_judge import fact_coverage_llm  # noqa: E402
 from eval.report import write_markdown_report  # noqa: E402
 
 
@@ -118,7 +117,6 @@ def run_case(workflow, case: dict) -> dict:
 
     facts = fact_coverage(response_text, case.get("expected_facts", []))
     user_question = _get_user_question_for_judge(case)
-    facts_llm = fact_coverage_llm(response_text, case.get("expected_facts", []), user_question)
     forbidden = must_not_contain(response_text, case.get("must_not_contain", []))
     retrieval = retrieval_precision(
         docs,
@@ -126,6 +124,20 @@ def run_case(workflow, case: dict) -> dict:
         top_k=3,
         expect_retrieval_fail=bool(case.get("expect_retrieval_fail", False)),
     )
+
+    retrieved_chunks = []
+    for rank, d in enumerate(docs[:5], 1):
+        meta = d.get("metadata") or {}
+        text = (d.get("text") or "").strip()
+        retrieved_chunks.append({
+            "rank": rank,
+            "source": meta.get("source_title", "?"),
+            "language": meta.get("language", "?"),
+            "dense_score": round(float(d.get("score") or 0.0), 4),
+            "rerank_score": round(float(d.get("rerank_score") or 0.0), 4),
+            "snippet": text[:350],
+            "text_len": len(text),
+        })
 
     return {
         "id": case["id"],
@@ -141,10 +153,10 @@ def run_case(workflow, case: dict) -> dict:
         "latency_sec": t["seconds"],
         "metrics": {
             "fact_coverage": facts,
-            "fact_coverage_llm": facts_llm,
             "forbidden_check": forbidden,
             "retrieval_precision": retrieval,
         },
+        "retrieved_chunks": retrieved_chunks,
         "error": error,
     }
 
@@ -156,7 +168,6 @@ def aggregate(results: list[dict]) -> dict:
         return {"n": 0}
 
     avg_fact = sum(r["metrics"]["fact_coverage"]["score"] for r in results) / n
-    avg_fact_llm = sum(r["metrics"]["fact_coverage_llm"]["score"] for r in results) / n
     avg_retrieval = sum(r["metrics"]["retrieval_precision"]["score"] for r in results) / n
     avg_top_score = sum(r["metrics"]["retrieval_precision"]["top_score"] for r in results) / n
     forbidden_pass = sum(1 for r in results if r["metrics"]["forbidden_check"]["passed"])
@@ -170,7 +181,6 @@ def aggregate(results: list[dict]) -> dict:
         return {
             "n": k,
             "fact_coverage_avg": round(sum(i["metrics"]["fact_coverage"]["score"] for i in items) / k, 3),
-            "fact_coverage_llm_avg": round(sum(i["metrics"]["fact_coverage_llm"]["score"] for i in items) / k, 3),
             "forbidden_pass_rate": round(sum(1 for i in items if i["metrics"]["forbidden_check"]["passed"]) / k, 3),
             "retrieval_precision_avg": round(sum(i["metrics"]["retrieval_precision"]["score"] for i in items) / k, 3),
             "top_sim_avg": round(sum(i["metrics"]["retrieval_precision"]["top_score"] for i in items) / k, 3),
@@ -188,17 +198,16 @@ def aggregate(results: list[dict]) -> dict:
         by_style.setdefault(r.get("writing_style", "unknown"), []).append(r)
     style_summary = {style: _aggregate_subset(items) for style, items in by_style.items()}
 
-    # Robustness gap: clean - broken
+    # Robustness gap: clean - broken (top_sim tabanli — retrieval kalite gostergesi)
     robustness_gap = None
     if "clean" in style_summary and "broken" in style_summary:
-        clean_score = style_summary["clean"].get("fact_coverage_llm_avg", 0)
-        broken_score = style_summary["broken"].get("fact_coverage_llm_avg", 0)
+        clean_score = style_summary["clean"].get("top_sim_avg", 0)
+        broken_score = style_summary["broken"].get("top_sim_avg", 0)
         robustness_gap = round(clean_score - broken_score, 3)
 
     return {
         "n": n,
         "fact_coverage_avg": round(avg_fact, 3),
-        "fact_coverage_llm_avg": round(avg_fact_llm, 3),
         "forbidden_pass_rate": round(forbidden_pass / n, 3),
         "retrieval_precision_avg": round(avg_retrieval, 3),
         "retrieval_top_score_avg": round(avg_top_score, 3),
@@ -243,7 +252,6 @@ def main() -> int:
         m = r["metrics"]
         print(
             f"   fact_str={m['fact_coverage']['score']:.2f} "
-            f"fact_llm={m['fact_coverage_llm']['score']:.2f} "
             f"forbidden={'OK' if m['forbidden_check']['passed'] else 'FAIL'} "
             f"retrieval={m['retrieval_precision']['score']:.2f} "
             f"top_sim={m['retrieval_precision']['top_score']:.2f} "
@@ -259,7 +267,6 @@ def main() -> int:
     print("\n" + "=" * 70)
     print(f"OZET: n={summary['n']}  "
           f"fact_str={summary['fact_coverage_avg']:.3f}  "
-          f"fact_llm={summary['fact_coverage_llm_avg']:.3f}  "
           f"forbidden_pass={summary['forbidden_pass_rate']:.3f}  "
           f"retrieval={summary['retrieval_precision_avg']:.3f}  "
           f"top_sim={summary['retrieval_top_score_avg']:.3f}  "
@@ -273,12 +280,12 @@ def main() -> int:
             if style in style_summary:
                 s = style_summary[style]
                 print(f"  {style:8s} n={s['n']:>2d}  "
-                      f"fact_llm={s.get('fact_coverage_llm_avg', 0):.3f}  "
+                      f"fact_str={s.get('fact_coverage_avg', 0):.3f}  "
                       f"forbidden={s.get('forbidden_pass_rate', 0):.3f}  "
                       f"top_sim={s.get('top_sim_avg', 0):.3f}")
         gap = summary.get("robustness_gap_clean_vs_broken")
         if gap is not None:
-            print(f"  ROBUSTNESS GAP (clean - broken) = {gap:+.3f}")
+            print(f"  ROBUSTNESS GAP top_sim (clean - broken) = {gap:+.3f}")
 
     REPORTS_DIR.mkdir(parents=True, exist_ok=True)
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")

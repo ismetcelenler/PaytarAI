@@ -68,6 +68,47 @@ def parse_pdf(pdf_path: str | Path) -> dict:
     }
 
 
+def parse_pdf_pymupdf(pdf_path: str | Path) -> dict:
+    """
+    PDF dosyasini PyMuPDF (fitz) ile parse eder.
+
+    Docling Turkce karakterleri kelimeden ayiriyor (ı, ş, ğ → "Is ı" bug'i).
+    Turkce kaynaklar icin PyMuPDF kullanilir; Docling EN kaynaklarda kalir.
+
+    Tablo yapisi korunmaz (PyMuPDF duz metin verir) ama Turkce metin saglam.
+
+    Args:
+        pdf_path: PDF dosya yolu
+
+    Returns:
+        dict (parse_pdf ile ayni sema): name, markdown, pages, tables, char_count
+    """
+    import fitz  # PyMuPDF
+
+    pdf_path = Path(pdf_path)
+    if not pdf_path.exists():
+        raise FileNotFoundError(f"PDF bulunamadi: {pdf_path}")
+
+    doc = fitz.open(str(pdf_path))
+    pages_text = []
+    for i in range(len(doc)):
+        page_text = doc[i].get_text()
+        pages_text.append(page_text)
+    page_count = len(doc)
+    doc.close()
+
+    # Markdown gibi sayfalar arasinda \n\n koy (chunking icin paragraf isareti)
+    markdown = "\n\n".join(pages_text)
+
+    return {
+        "name": pdf_path.stem,
+        "markdown": markdown,
+        "pages": page_count,
+        "tables": 0,  # PyMuPDF tablo yapisi tutmaz
+        "char_count": len(markdown),
+    }
+
+
 def parse_all_documents(documents_dir: str = "data/documents") -> list[dict]:
     """
     Belirtilen klasordeki tum PDF'leri parse eder.

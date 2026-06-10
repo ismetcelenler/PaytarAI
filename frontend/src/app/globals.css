@@ -16,18 +16,32 @@
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-sans);
-  --font-mono: var(--font-geist-mono);
-  --font-heading: var(--font-sans);
+  --font-mono: var(--font-mono);
+  --font-serif: var(--font-serif);
+  --font-heading: var(--font-serif);
 
-  /* PaytarAI custom colors */
-  --color-paytar-green: #2D6A4F;
-  --color-paytar-green-light: #40916C;
-  --color-paytar-green-dark: #1B4332;
-  --color-paytar-sage: #d1e2c4;
-  --color-paytar-sage-light: #e8f0e1;
-  --color-paytar-cream: #cfceca;
-  --color-paytar-cream-light: #e8e6e3;
-  --color-paytar-emergency: #D32F2F;
+  /* PaytarAI Çayır paleti (Claude Design "Çayır" varyantı) */
+  --color-paytar-bg: var(--cayir-bg);
+  --color-paytar-sidebar: var(--cayir-sidebar);
+  --color-paytar-surface: var(--cayir-surface);
+  --color-paytar-surface2: var(--cayir-surface2);
+  --color-paytar-line: var(--cayir-line);
+  --color-paytar-ink: var(--cayir-ink);
+  --color-paytar-ink2: var(--cayir-ink2);
+  --color-paytar-muted: var(--cayir-muted);
+  --color-paytar-accent: var(--cayir-accent);
+  --color-paytar-accent-ink: var(--cayir-accent-ink);
+  --color-paytar-accent-soft: var(--cayir-accent-soft);
+
+  /* Eski paytar-* token'lari (mevcut sayfalar bunlari kullaniyor) */
+  --color-paytar-green: #6b8e5a;
+  --color-paytar-green-light: #8aa97a;
+  --color-paytar-green-dark: #3d5a2c;
+  --color-paytar-sage: #c9d5ba;
+  --color-paytar-sage-light: #e0e7d4;
+  --color-paytar-cream: #f5f1e8;
+  --color-paytar-cream-light: #fbf8ef;
+  --color-paytar-emergency: #b94a3a;
 
   /* Shadcn color mappings */
   --color-sidebar-ring: var(--sidebar-ring);
@@ -69,25 +83,38 @@
 }
 
 :root {
-  /* PaytarAI branded light theme */
-  --background: #FFFFFF;
-  --foreground: #1a1a1a;
-  --card: #FFFFFF;
-  --card-foreground: #1a1a1a;
-  --popover: #FFFFFF;
-  --popover-foreground: #1a1a1a;
-  --primary: #2D6A4F;
-  --primary-foreground: #FFFFFF;
-  --secondary: #d1e2c4;
-  --secondary-foreground: #1B4332;
-  --muted: #f5f5f0;
-  --muted-foreground: #6b7280;
-  --accent: #d1e2c4;
-  --accent-foreground: #1B4332;
-  --destructive: #D32F2F;
-  --border: #e0ddd8;
-  --input: #e0ddd8;
-  --ring: #2D6A4F;
+  /* Çayır light tokens */
+  --cayir-bg:           #f5f1e8;
+  --cayir-sidebar:      #ece6d6;
+  --cayir-surface:      #fbf8ef;
+  --cayir-surface2:     #efe9d8;
+  --cayir-line:         rgba(45, 42, 36, 0.10);
+  --cayir-ink:          #2d2a24;
+  --cayir-ink2:         #5a544a;
+  --cayir-muted:        #8a8678;
+  --cayir-accent:       #6b8e5a;
+  --cayir-accent-ink:   #3d5a2c;
+  --cayir-accent-soft:  rgba(107, 142, 90, 0.12);
+
+  /* Shadcn semantic tokens map to Çayır */
+  --background: var(--cayir-bg);
+  --foreground: var(--cayir-ink);
+  --card: var(--cayir-surface);
+  --card-foreground: var(--cayir-ink);
+  --popover: var(--cayir-surface);
+  --popover-foreground: var(--cayir-ink);
+  --primary: var(--cayir-accent);
+  --primary-foreground: var(--cayir-surface);
+  --secondary: var(--cayir-surface2);
+  --secondary-foreground: var(--cayir-ink);
+  --muted: var(--cayir-surface2);
+  --muted-foreground: var(--cayir-muted);
+  --accent: var(--cayir-accent-soft);
+  --accent-foreground: var(--cayir-accent-ink);
+  --destructive: #b94a3a;
+  --border: var(--cayir-line);
+  --input: var(--cayir-line);
+  --ring: var(--cayir-accent);
   --chart-1: #2D6A4F;
   --chart-2: #40916C;
   --chart-3: #52B788;
@@ -105,24 +132,37 @@
 }
 
 .dark {
-  --background: #1a1a1a;
-  --foreground: #f5f5f0;
-  --card: #252525;
-  --card-foreground: #f5f5f0;
-  --popover: #252525;
-  --popover-foreground: #f5f5f0;
-  --primary: #52B788;
-  --primary-foreground: #1a1a1a;
-  --secondary: #2a3a2a;
-  --secondary-foreground: #d1e2c4;
-  --muted: #2a2a2a;
-  --muted-foreground: #a0a0a0;
-  --accent: #2a3a2a;
-  --accent-foreground: #d1e2c4;
-  --destructive: #ef5350;
-  --border: rgba(255, 255, 255, 0.1);
-  --input: rgba(255, 255, 255, 0.15);
-  --ring: #52B788;
+  /* Çayır dark tokens */
+  --cayir-bg:           #1f1d1a;
+  --cayir-sidebar:      #191714;
+  --cayir-surface:      #26231f;
+  --cayir-surface2:     #2d2924;
+  --cayir-line:         rgba(232, 227, 213, 0.10);
+  --cayir-ink:          #e8e3d5;
+  --cayir-ink2:         #c5bfae;
+  --cayir-muted:        #857f6e;
+  --cayir-accent:       #a4bf8b;
+  --cayir-accent-ink:   #c4d9aa;
+  --cayir-accent-soft:  rgba(164, 191, 139, 0.16);
+
+  --background: var(--cayir-bg);
+  --foreground: var(--cayir-ink);
+  --card: var(--cayir-surface);
+  --card-foreground: var(--cayir-ink);
+  --popover: var(--cayir-surface);
+  --popover-foreground: var(--cayir-ink);
+  --primary: var(--cayir-accent);
+  --primary-foreground: var(--cayir-bg);
+  --secondary: var(--cayir-surface2);
+  --secondary-foreground: var(--cayir-ink);
+  --muted: var(--cayir-surface2);
+  --muted-foreground: var(--cayir-muted);
+  --accent: var(--cayir-accent-soft);
+  --accent-foreground: var(--cayir-accent-ink);
+  --destructive: #e16a5a;
+  --border: var(--cayir-line);
+  --input: var(--cayir-line);
+  --ring: var(--cayir-accent);
   --chart-1: #52B788;
   --chart-2: #74C69D;
   --chart-3: #95D5B2;

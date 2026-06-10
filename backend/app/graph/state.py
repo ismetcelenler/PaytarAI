@@ -60,8 +60,11 @@ class AgentState(TypedDict):
     # Aktif model adı
     active_model: str
 
-    # Retrieval similarity score
+    # Retrieval similarity score (DENSE cosine — confidence gate bunu kullanir)
     retrieval_similarity_score: float
+
+    # Reranker top score (cross-encoder sigmoid output, audit/log icin)
+    rerank_top_score: float
 
     # Kaynak uyumu (birden fazla kaynak aynı bilgiyi doğruluyor mu)
     source_agreement: bool

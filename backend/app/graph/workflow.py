@@ -42,6 +42,25 @@ def after_scope_check(state: dict) -> str:
     return "compress"
 
 
+# Confidence gate'in retriever'dan sonra erken karar verme esigi.
+# confidence_node icindeki INSUFFICIENT_THRESHOLD ile ayni tutulmali.
+EARLY_CONFIDENCE_THRESHOLD = 0.60
+
+
+def after_retriever(state: dict) -> str:
+    """
+    Retriever sonrasi yonlendirme.
+    - top_sim < EARLY_CONFIDENCE_THRESHOLD ise generator'i ATLA, dogrudan confidence'a
+      git (confidence node template fallback dondurur). 50+ saniyelik LLM cagrisini
+      bosa harcamayalim.
+    - Aksi halde normal generator akisi.
+    """
+    top_sim = state.get("retrieval_similarity_score", 0.0)
+    if top_sim < EARLY_CONFIDENCE_THRESHOLD:
+        return "confidence"  # generator atla, confidence template fallback yapar
+    return "generator"
+
+
 def build_graph() -> StateGraph:
     """
     LangGraph workflow'u olusturur ve derler.
@@ -78,7 +97,17 @@ def build_graph() -> StateGraph:
 
     # Normal akis (in-scope sorular icin)
     graph.add_edge("compress", "retriever")
-    graph.add_edge("retriever", "generator")
+
+    # Retriever sonrasi early confidence gate:
+    # top_sim cok dususe generator'i atla, direkt confidence'a git (template fallback).
+    graph.add_conditional_edges(
+        "retriever",
+        after_retriever,
+        {
+            "generator": "generator",
+            "confidence": "confidence",
+        },
+    )
     graph.add_edge("generator", "critic")
 
     # Conditional edge: critic -> generator (retry) veya confidence (accept)
