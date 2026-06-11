@@ -74,3 +74,9 @@ class AgentState(TypedDict):
 
     # Kaynak güven seviyesi (1-6)
     source_trust_level: int
+
+    # Query analyzer çıktısı — scope_check_node yazar, retriever_node okur.
+    # {is_in_scope, hyde_variants, enriched_keywords, raw_text, error}
+    # ÖNEMLI: Bu alan AgentState'te tanımlanmazsa LangGraph state'i schema ile
+    # filtreler ve node'lar arası kaybeder → Multi-HyDE + enriched retrieval ölü kalır.
+    query_analysis: dict

@@ -1,11 +1,21 @@
 """
-PaytarAI — Critic Node (Hibrit)
+PaytarAI — Critic Node (LLM-judge only)
 
-Taslak yaniti iki katmanli denetler:
-1) Hard rules (regex/keyword): yasak ilac+doz, Latince terim, markdown tablo,
-   inline citation, numerical halusinasyon
-2) LLM-judge (Cerebras gpt-oss-120b low reasoning): semantik kontroller —
-   disclaimer varligi, acil uyari uygunlugu, semantik halusinasyon, sade dil
+Tek katmanli, scalable kalite kontrolu. Onceki hard-rule katmanlari
+(sanitize regex enum'lari + hard rules) sokuldu — endustri standardi medical RAG
+sistemleri (OpenEvidence, CRAG, FACTSCORE) yalnizca LLM-judge + skor harmanlamasi
+kullaniyor; hand-curated ilac/term listeleri olceklenmiyor.
+
+Akis:
+  1) Generator fallback metni geldiyse critic atlanir (statik guvenli metin)
+  2) LLM-judge cagrilir (Cerebras gpt-oss-120b, low reasoning, JSON 5 boyut)
+  3) Judge sorun bildirirse → critic_rejected → generator retry alir
+  4) Judge SILENT FAIL ederse (exception, parse error) → FAIL-CLOSED:
+       attempts=0 → reject + retry; attempts>=1 → SAFE FALLBACK
+     (Eski davranis "silent fail → accept" idi; bu kritik bypass kapatildi.)
+  5) Retry sonrasi (attempts>=1):
+       - grounded=false veya answer_relevant=false → SAFE FALLBACK
+       - sadece stil sorunlari → kabul (latency koruma)
 """
 
 import json
@@ -18,204 +28,7 @@ from app.graph.audit import audit_log
 
 
 # ---------------------------------------------------------------
-# SANITIZE — kozmetik sorunlari LLM cagirmadan temizler
-# ---------------------------------------------------------------
-
-_INLINE_CITATION_PATTERNS = [
-    r"【\s*Kaynak\s*\d+\s*】",
-    r"\[\s*Kaynak\s*\d+\s*\]",
-    r"\(\s*Kaynak\s*\d+\s*\)",
-    r"【\s*Referans\s*\d+\s*】",
-    r"\[\s*Referans\s*\d+\s*\]",
-]
-
-_META_PHRASES = [
-    "kaynakta doğrudan tedavi önerisi yoktur, sadece tanısal ilişki verilmiştir",
-    "kaynakta doğrudan tedavi önerisi yoktur",
-    "kaynakta yalnızca tanısal ilişki verilmiştir",
-    "kaynaklarda detay yok",
-    "kaynakta detay yok",
-    "tabloda görüldüğü gibi",
-    "tabloda görüldüğü üzere",
-    "kaynakta belirtilmemiş",
-]
-
-
-def _sanitize_draft(draft: str, user_role: str) -> str:
-    """Kozmetik sorunlari LLM olmadan duzeltir."""
-    cleaned = draft
-
-    # 1. Inline [Kaynak N] / 【Kaynak N】 etiketlerini sil (her iki rol icin)
-    for pat in _INLINE_CITATION_PATTERNS:
-        cleaned = re.sub(pat, "", cleaned, flags=re.IGNORECASE)
-
-    # 2. Meta-yorum cumlelerini sil (vet & uretici)
-    for phrase in _META_PHRASES:
-        cleaned = re.sub(re.escape(phrase) + r"[.,;]?\s*", "", cleaned, flags=re.IGNORECASE)
-
-    # 3. Uretici modunda kaynak satirini ve "Rebhun's" gibi kitap adlarini sil
-    if user_role == "producer":
-        # "Kaynak: ..." satirini tamamen sil
-        cleaned = re.sub(r"(?im)^\s*Kaynak\s*[:：].*$", "", cleaned)
-        cleaned = re.sub(r"(?im)^\s*Referans\s*[:：].*$", "", cleaned)
-        # Cumle icinde gecen kitap adlarini sil
-        cleaned = re.sub(r"Rebhun'?s?[^,.\n]*", "", cleaned, flags=re.IGNORECASE)
-
-    # 4. Cift bosluklari ve fazla bos satirlari topla
-    cleaned = re.sub(r"[ \t]+", " ", cleaned)
-    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
-    cleaned = cleaned.strip()
-
-    return cleaned
-
-
-# Critic kontrol fonksiyonlari
-
-def _check_source_citation(draft: str, docs: list[dict], user_role: str = "veterinarian") -> str | None:
-    """Vet: sonda kaynak atfi gereklidir. Uretici: bu kontrol gecerli degil (sanitize halleder)."""
-    if user_role == "producer":
-        return None
-
-    # Vet — sondaki kaynak satiri gereklidir; inline/meta sanitize'da temizlendi
-    citation_markers = ["kaynak:", "kaynak :", "source:", "referans:"]
-    has_citation = any(marker in draft.lower() for marker in citation_markers)
-    if not has_citation and docs:
-        return "Yanitin sonunda kaynak atfi yok. Sonuna tek satir 'Kaynak: [Kitap Adi], bolum' ekle."
-    return None
-
-
-def _check_hallucination(draft: str, docs: list[dict]) -> str | None:
-    """
-    DAR halusinasyon kontrolu — sadece ILAÇ DOZ sayilari (mg/kg, ml/kg, iu/kg gibi).
-
-    Eskiden tum sayilari kontrol ediyordu (10 dk, 38°C, 500 ml dahil) → bu
-    genel bakim tavsiyelerini halusinasyon sandi (false positive). Yeni mantik:
-    sadece <SAYI> + <BIRIM>/<VUCUT_AGIRLIK_BIRIMI> kalibinda gelen DOZ sayilari.
-
-    Genel sure/sicaklik/hacim sayilari (10 dk, 38°C, 500 mL gibi) artik denetlenmez —
-    bunlar genel bakim onerileri, kaynakta birebir olmasi gerekmez.
-    """
-    # Doz kalibi: 10 mg/kg, 5 ml/kg, 25 iu/kg, 0.5 mg/saat, vb.
-    dose_pattern = re.compile(
-        r"\b(\d+(?:\.\d+)?)\s*(?:mg|ml|mcg|iu|cc|g)\s*/\s*(?:kg|gun|day|saat|h|hr)\b",
-        re.IGNORECASE,
-    )
-
-    def extract_doses(text: str) -> set[float]:
-        return {float(m) for m in dose_pattern.findall(text)}
-
-    if not docs:
-        return None
-
-    draft_doses = extract_doses(draft)
-    if not draft_doses:
-        return None  # Doz yoksa kontrol gerek yok
-
-    source_text = " ".join(d.get("text", "") for d in docs)
-    source_doses = extract_doses(source_text)
-
-    # Her draft dozu icin kaynakta %10 toleransla yakin deger var mi
-    suspicious: list[str] = []
-    for num in draft_doses:
-        found = False
-        for src_num in source_doses:
-            if src_num == 0:
-                continue
-            if abs(num - src_num) / src_num < 0.10:
-                found = True
-                break
-        if not found:
-            suspicious.append(str(num))
-
-    # 2'den fazla eslesmeyen doz → reddet (kalibre)
-    if len(suspicious) > 2:
-        return f"Yanitta {len(suspicious)} DOZ degeri kaynaklarda dogrulanamadi: {suspicious[:3]}. Kaynakta olmayan doz uydurma."
-
-    return None
-
-
-def _check_role_compliance(draft: str, user_role: str) -> str | None:
-    """Rol bazli uyumluluk kontrolu."""
-    if user_role == "producer":
-        # Uretici modunda receteli ilac, dozaj veya teknik terim olmamali
-        prescription_markers = [
-            # Dozaj birimleri
-            "mg/kg", "ml/kg", "mg/ml", "iu/kg", "mg/gün", "ml/gün",
-            # Uygulama yollari (EN)
-            "iv ", "i.v.", "intramuscular", "subcutaneous", "intravenous", "intramammary",
-            # Uygulama yollari (TR)
-            "intravenöz", "intramüsküler", "subkütan", "kas içi enjeksiyon", "damar içi enjeksiyon",
-            # Receteli ilac adlari
-            "penisilin", "penicillin", "oksitetrasiklin", "oxytetracycline",
-            "ampisilin", "ampicillin", "deksametazon", "dexamethasone",
-            "flunixin", "meloksikem", "meloxicam",
-            # Karmasik tibbi terimler / Latince
-            "peritonitis", "endometritis", "septisemi", "septik şok",
-            "musculoskeletal", "polyarthritis", "hipokalsemi", "hipomagnezemi",
-            "recumbency", "palpasyon", "primiparous", "multiparous",
-            "anoreksi", "subinvolüsyon", "ruminal tympani", "asidoz", "ketozis",
-        ]
-        violations = [m for m in prescription_markers if m in draft.lower()]
-        if violations:
-            return f"Uretici modunda teknik dozaj/uygulama/ilac/tibbi terim kullanildi: {violations}. Sade Turkce ile yeniden yaz, tibbi terim parantez icinde bile yazma."
-
-        # Tablo (markdown) yasak — uretici tablo gormez
-        # En az 2 satir | ile basliyorsa veya | ... | --- ... --- | kalibi varsa tablo say
-        lines_with_pipe = [ln for ln in draft.splitlines() if ln.strip().startswith("|") and "|" in ln.strip()[1:]]
-        if len(lines_with_pipe) >= 2:
-            return "Uretici yanitinda tablo kullanildi. Tablo yerine 2-3 cumlelik sade aciklama yaz."
-
-    elif user_role == "veterinarian":
-        # Veteriner modunda cok basit dil kontrolu (istege bagli)
-        pass
-
-    return None
-
-
-def _check_emergency_flag(draft: str, docs: list[dict]) -> str | None:
-    """Acil durumlar icin uyari kontrolu."""
-    # Sadece gercekten hayati tehlike belirten terimler
-    emergency_keywords = [
-        "fatal", "death", "emergency", "life-threatening",
-    ]
-
-    source_text = " ".join(d["text"] for d in docs).lower()
-    source_has_emergency = any(kw in source_text for kw in emergency_keywords)
-
-    # Yanittaki acil uyari varyantlari
-    draft_lower = draft.lower()
-    warning_markers = ["acil", "hemen veteriner", "hayati tehlike", "tehlike", "uyarı"]
-    draft_has_warning = any(m in draft_lower for m in warning_markers)
-
-    if source_has_emergency and not draft_has_warning:
-        return "Kaynaklar acil/tehlikeli durum belirtiyor ancak yanit acil uyari icermiyor. ACİL uyarisi ekle."
-
-    return None
-
-
-def _check_disclaimer(draft: str, user_role: str) -> str | None:
-    """[ESKI — LLM-judge'a devredildi] Uretici modunda zorunlu disclaimer kontrolu.
-
-    Bu fonksiyon artik critic_node'dan cagrilmaz. Kalmasinin tek sebebi
-    backward compat — yeni karar LLM-judge tarafindan veriliyor.
-    """
-    if user_role == "producer":
-        disclaimer_markers = ["karar destegi", "veteriner hekime danisin", "veteriner", "disclaimer"]
-        has_disclaimer = any(m in draft.lower() for m in disclaimer_markers)
-        if not has_disclaimer:
-            return "Uretici modunda zorunlu disclaimer eksik. Yanitinin sonuna uyari ekle."
-    return None
-
-
-# ---------------------------------------------------------------
-# LLM-JUDGE — sade stil kontrolleri (Cerebras gpt-oss-120b, low reasoning)
-#
-# Notlar:
-# - Halusinasyon kontrolu kaldirildi (kaynak metin gondermiyoruz).
-#   Halusinasyon icin: numerical hard rule + eval fact_coverage_llm kullaniliyor.
-# - Judge SADECE yanitin ic tutarliligini kontrol eder: disclaimer, emergency, sade dil.
-# - Kaynak metin GONDERILMIYOR — token tasarrufu + judge'in yanlis "kaynakta yok"
-#   reflexini onler.
+# LLM-JUDGE prompt
 # ---------------------------------------------------------------
 
 JUDGE_PROMPT = """Sen bir veteriner asistan yaniti degerlendiriyorsun. Asagidaki yaniti 5 boyutta degerlendir ve SADECE JSON cevap ver.
@@ -283,31 +96,61 @@ ONEMLI: Halusinasyon kontrolu SADECE "grounded" alaninda. Soru-yanit uyumu SADEC
 SADECE JSON yaz, baska metin EKLEME."""
 
 
+# Judge sonucundan hangi failure'lar SAFE FALLBACK tetikler
+_HALLUCINATION_SIGNATURES = (
+    "kaynaklarda yer almayan",   # grounded=false
+    "ayni klinik konuda degil",  # answer_relevant=false
+)
+
+
+# ---------------------------------------------------------------
+# SAFE FALLBACK metinleri
+# ---------------------------------------------------------------
+
+_SAFE_FALLBACK_PRODUCER = (
+    "Bu konuda elimdeki kaynaklarda yeterli ve guvenilir bilgi bulamadim. "
+    "Lutfen veteriner hekiminize dogrudan danisin — durumun ciddiyetine gore "
+    "muayene gerekebilir.\n\n"
+    "⚠️ Bu bilgi karar destegidir. Acil bir durumsa hemen veterinerinize basvurun."
+)
+
+_SAFE_FALLBACK_VET = (
+    "Elimdeki kaynaklarda bu spesifik konuya iliskin guvenilir bir veri "
+    "dogrulanamadi. Halusinasyon riskini onlemek icin yanit uretilmedi; "
+    "lutfen baska bir literatur kaynagina danisin."
+)
+
+
+# ---------------------------------------------------------------
+# LLM-JUDGE — DONUS: (problems: str | None, judge_succeeded: bool)
+# ---------------------------------------------------------------
+
 def _llm_judge_check(
     draft: str,
     docs: list[dict],
     user_role: str,
     user_query: str = "",
-) -> str | None:
+) -> tuple[str | None, bool]:
     """
-    LLM-as-judge: 5 boyutta degerlendirme.
-      - disclaimer, emergency, sade dil (stil)
-      - grounded (yanit kaynaktan mi)
-      - answer_relevant (yanit soruyu cevapliyor mu)
+    LLM-as-judge.
 
-    Cerebras gpt-oss-120b @ low reasoning, ~0.5-1 saniye.
+    Donen tuple:
+      - problems: judge'in tespit ettigi sorunlarin string'i ("; " ile ayrilmis)
+        veya None (sorun yok)
+      - judge_succeeded: judge cagrisinin GERCEKTEN tamamlandigini gosterir.
+        False ise (Cerebras exception, JSON parse fail, cok kisa draft) ARAYAN
+        TARAF FAIL-CLOSED davranmali — silent fail'e izin verme.
     """
+    # Cok kisa draft → judge anlamsiz olur, ama bu durumda fail-closed olmamali
+    # cunku draft zaten "Soru anlasilamadi" gibi sistem mesaji.
     if not draft or len(draft) < 20:
-        return None  # cok kisa yanitta judge bos vermeyelim
+        return None, True  # gercek skip, fail degil
 
-    # Acil sinyali icin kaynaktaki anahtar kelimelere bak (lokal, LLM'e gitmiyor)
     source_text_full = " ".join(d.get("text", "") for d in docs)
     source_text_lower = source_text_full.lower()
     emergency_keywords = ["fatal", "death", "emergency", "life-threatening"]
     source_has_emergency = any(kw in source_text_lower for kw in emergency_keywords)
 
-    # Grounding check icin kaynak metnini judge'a gonder.
-    # 2500 char ~ 600 token, judge'in gormesi icin yeterli; LLM context limiti gevsek tutulur.
     sources_for_judge = source_text_full[:2500] if source_text_full else "(kaynak yok)"
 
     prompt = JUDGE_PROMPT.format(
@@ -324,10 +167,6 @@ def _llm_judge_check(
             base_url="https://api.cerebras.ai/v1",
             model="gpt-oss-120b",
             temperature=0,
-            # NOT: gpt-oss-120b reasoning modeli. low reasoning ~10-30 token harcar,
-            # 4 alanli JSON ~50-100 token. 800 yeterli marj sagliyor.
-            # Eski 300 deger bazen reasoning_tokens > content_tokens dengesizliginde
-            # content bos donmesine neden oluyordu (bkz. enrich_query ayni bug).
             max_tokens=800,
             reasoning_effort="low",  # type: ignore[call-arg]
         )
@@ -336,22 +175,23 @@ def _llm_judge_check(
 
         m = re.search(r"\{[\s\S]*\}", content)
         if not m:
-            print(f"[LLM-JUDGE-DEBUG] JSON parse edilemedi. Raw: {content[:200].encode('ascii', 'replace').decode('ascii')}")
-            return None
+            print(
+                f"[LLM-JUDGE-DEBUG] JSON parse edilemedi (FAIL-CLOSED). "
+                f"Raw: {content[:200].encode('ascii', 'replace').decode('ascii')}"
+            )
+            return None, False  # parse fail → fail-closed
 
         result = json.loads(m.group())
-
-        # DEBUG (ASCII-safe)
-        result_json = json.dumps(result, ensure_ascii=True)
-        print(f"[LLM-JUDGE-DEBUG] role={user_role}, emergency={source_has_emergency}, result={result_json}")
+        print(
+            f"[LLM-JUDGE-DEBUG] role={user_role}, emergency={source_has_emergency}, "
+            f"result={json.dumps(result, ensure_ascii=True)}"
+        )
 
         problems: list[str] = []
 
         if user_role == "producer" and not result.get("disclaimer_present", True):
             problems.append("uretici disclaimer eksik")
 
-        # FIX 1: Sadece producer icin emergency uyarisi zorla. Vet yanitinda
-        # 🚨 emoji gerekmez (meslektas zaten baglami biliyor).
         if (
             user_role == "producer"
             and source_has_emergency
@@ -362,73 +202,53 @@ def _llm_judge_check(
         if user_role == "producer" and not result.get("lay_language_ok", True):
             problems.append("uretici icin yanit fazla teknik")
 
-        # GROUNDING: yanit kaynaklardaki bilgilere bagli mi?
-        # Default True (suphe varsa kabul) — bu sadece NET kaynak-disi iddialarda tetiklenir.
         if not result.get("grounded", True):
             problems.append(
                 "yanitta kaynaklarda yer almayan spesifik iddialar var; "
                 "sadece kaynaklardaki bilgilerle, gerekirse genel kategori "
-                "ifadeleriyle (ornegin spesifik ilac adi yerine 'veterinerin "
-                "uygun gordugu tedavi') yeniden yaz"
+                "ifadeleriyle yeniden yaz"
             )
 
-        # ANSWER RELEVANCE: yanit sorulan soruyu cevapliyor mu?
-        # Default True (suphede kabul). Sadece konu tamamen sapmissa FALSE doner.
         if not result.get("answer_relevant", True):
             problems.append(
                 "yanit kullanicinin sorusuyla ayni klinik konuda degil; "
                 "sorulan konuya odaklan ve kaynaklarda dogrudan ele alinan "
-                "bilgiyi kullan, eger kaynaklarda bu konuda yeterli bilgi "
-                "yoksa 'bu konuda kaynaklarda yeterli bilgi yok, veterinerinize "
-                "danisin' diyerek durust bir yanit ver"
+                "bilgiyi kullan"
             )
 
-        return "; ".join(problems) if problems else None
+        return ("; ".join(problems) if problems else None), True
 
     except Exception as e:
-        # Judge hatasi critic'i fail etmesin
-        print(f"[critic LLM-judge] hata: {e} - skip")
-        return None
+        # FAIL-CLOSED: judge cagrisi patladi, critic'in atlanmasina IZIN VERME
+        print(f"[critic LLM-judge] HATA (FAIL-CLOSED): {e}")
+        return None, False
 
 
-_SAFE_FALLBACK_PRODUCER = (
-    "Bu konuda elimdeki kaynaklarda yeterli ve guvenilir bilgi bulamadim. "
-    "Lutfen veteriner hekiminize dogrudan danisin — durumun ciddiyetine gore "
-    "muayene gerekebilir.\n\n"
-    "⚠️ Bu bilgi karar destegidir. Acil bir durumsa hemen veterinerinize basvurun."
-)
-
-_SAFE_FALLBACK_VET = (
-    "Elimdeki kaynaklarda bu spesifik konuya iliskin guvenilir bir veri "
-    "dogrulanamadi. Halusinasyon riskini onlemek icin yanit uretilmedi; "
-    "lutfen baska bir literatur kaynagina danisin."
-)
-
-
-# Retry'da bu mesaj parcalarini iceren judge sonucu -> SAFE FALLBACK
-# (stil sorunlari kabul edilir; grounding/relevance fail'i kabul edilmez)
-_HALLUCINATION_SIGNATURES = (
-    "kaynaklarda yer almayan",   # grounded=false
-    "ayni klinik konuda degil",  # answer_relevant=false
-)
-
+# ---------------------------------------------------------------
+# CRITIC NODE
+# ---------------------------------------------------------------
 
 def critic_node(state: dict) -> dict:
     """
-    Critic node — taslak yaniti 5 boyutta dogrular.
+    Critic — tek katmanli, LLM-judge tabanli kalite kontrolu.
 
-    Mantik:
-      - attempts=0: tum check'ler, sorun varsa retry
-      - attempts=1: judge YINE calisir. Stil sorunlari (disclaimer/lay_lang/emergency)
-        kabul edilir; ANCAK grounded=false veya answer_relevant=false ise SAFE FALLBACK
-        ("yetersiz kaynak") yaniti yazilir — halusinasyon yayinlanmaz.
+    Akis:
+      1) Generator fallback → critic skip (statik guvenli metin)
+      2) Judge cagir
+         - fail (exception/parse) → FAIL-CLOSED: reject + retry; retry'da yine
+           fail ise SAFE FALLBACK
+         - succeeded + sorun yok → accept
+         - succeeded + sorun var:
+              attempts=0 → reject + retry
+              attempts>=1: grounded/relevance fail → SAFE FALLBACK;
+                           sadece stil → kabul
     """
-    raw_draft = state.get("draft_response", "")
+    draft = state.get("draft_response", "")
     docs = state.get("retrieved_docs", [])
     user_role = state.get("user_role", "producer")
     attempts = state.get("critic_attempts", 0)
 
-    # Son kullanici mesajini cikar — LLM judge'in answer_relevant kontrolu icin gerekli
+    # Son kullanici mesajini cikar — judge'in answer_relevant kontrolu icin
     user_query = ""
     for msg in reversed(state.get("messages", [])):
         if isinstance(msg, dict) and msg.get("role") == "user":
@@ -438,76 +258,77 @@ def critic_node(state: dict) -> dict:
             user_query = msg.content
             break
 
-    # SANITIZE: kozmetik sorunlari LLM cagirmadan temizle
-    draft = _sanitize_draft(raw_draft, user_role)
-    state["draft_response"] = draft  # generator retry alirsa temizlenmis halini gormesin diye
-
-    # Fallback yaniti (LLM hatasi, rate limit vs.) ise critic atla
+    # Generator fallback yaniti (LLM hata/rate limit vs.) → critic atla
     if state.get("response_status") == "fallback":
         state["final_response"] = draft
         state["response_status"] = "accepted"
-        audit_log(state, "critic_skip_fallback", reason="Generator fallback — critic atlanir")
+        audit_log(state, "critic_skip_fallback", reason="Generator fallback metni (statik)")
         return state
 
-    # Retry sonrasi: judge'i YINE calistir, ama sadece halusinasyon/relevance icin reddet
-    if attempts >= 1:
-        judge_result = _llm_judge_check(draft, docs, user_role, user_query=user_query)
-        is_hallucination = judge_result and any(sig in judge_result for sig in _HALLUCINATION_SIGNATURES)
+    judge_problems, judge_ok = _llm_judge_check(draft, docs, user_role, user_query=user_query)
+    is_hallucination_sig = (
+        judge_problems is not None
+        and any(sig in judge_problems for sig in _HALLUCINATION_SIGNATURES)
+    )
 
-        if is_hallucination:
-            # Halusinasyon veya topic mismatch retry sonrasi hala var -> SAFE FALLBACK
+    # ── FAIL-CLOSED: judge cagrisi basarisiz olduysa ────────────
+    if not judge_ok:
+        if attempts >= 1:
+            # Retry de basarisiz → SAFE FALLBACK
             fallback = _SAFE_FALLBACK_PRODUCER if user_role == "producer" else _SAFE_FALLBACK_VET
             state["final_response"] = fallback
             state["response_status"] = "rejected_safe_fallback"
             audit_log(
                 state,
                 "critic_safe_fallback",
-                reason=f"Retry sonrasi grounded/relevance fail: {judge_result[:150]}",
+                reason="LLM-judge silent fail x2 — halusinasyon riski varsayildi",
             )
         else:
-            # Stil sorunlari retry'da kabul (latency koruma)
-            state["final_response"] = draft
-            state["response_status"] = "accepted_after_max_retries"
-            audit_log(state, "critic_max_retries", reason="Stil sorunlari kabul, halusinasyon yok")
+            state["critic_rejection_reasons"] = [
+                "[llm_judge] judge cagrisi yapilamadi (Cerebras hata/parse fail) — fail-closed retry"
+            ]
+            state["critic_attempts"] = attempts + 1
+            state["response_status"] = "rejected"
+            audit_log(
+                state,
+                "critic_rejected",
+                reason="LLM-judge silent fail — fail-closed retry tetiklendi",
+            )
         return state
 
-    # HIBRIT CRITIC:
-    #  - Hard rules (regex/keyword): sifir maliyet, kesin yakalamalar
-    #  - LLM-judge (Cerebras gpt-oss-120b low): paraphrase ve semantik
-    # Her check'in adi ile birlikte logla — debug-before-fix metodolojisi
-    check_results = {
-        "hard:source_citation": _check_source_citation(draft, docs, user_role),
-        "hard:numerical_hallucination": _check_hallucination(draft, docs),
-        "hard:role_compliance": _check_role_compliance(draft, user_role),
-        "llm_judge": _llm_judge_check(draft, docs, user_role, user_query=user_query),
-    }
+    # ── RETRY YOLU ──────────────────────────────────────────────
+    if attempts >= 1:
+        if is_hallucination_sig:
+            fallback = _SAFE_FALLBACK_PRODUCER if user_role == "producer" else _SAFE_FALLBACK_VET
+            state["final_response"] = fallback
+            state["response_status"] = "rejected_safe_fallback"
+            audit_log(
+                state,
+                "critic_safe_fallback",
+                reason=f"Retry sonrasi grounded/relevance fail: {judge_problems[:150] if judge_problems else ''}",
+            )
+        else:
+            # Sadece stil sorunlari kabul (latency koruma)
+            state["final_response"] = draft
+            state["response_status"] = "accepted_after_max_retries"
+            audit_log(
+                state,
+                "critic_max_retries",
+                reason=f"Stil sorunlari kabul: {(judge_problems or '(yok)')[:150]}",
+            )
+        return state
 
-    # ASCII-safe debug print — Windows cp1254 encoding crashine karsi
-    triggered = [(name, reason) for name, reason in check_results.items() if reason is not None]
-    if triggered:
-        print(f"[CRITIC-TRIGGER] attempt={attempts + 1}, triggered_checks={len(triggered)}")
-        for name, reason in triggered:
-            # Unicode karakter problemlerini onle
-            safe_reason = reason.encode("ascii", "replace").decode("ascii")[:200]
-            print(f"  - {name}: {safe_reason}")
-
-    rejections = [f"[{name}] {reason}" for name, reason in triggered]
-
-    if rejections:
-        state["critic_rejection_reasons"] = rejections
+    # ── ILK GECIS ───────────────────────────────────────────────
+    if judge_problems:
+        print(f"[CRITIC-TRIGGER] attempt={attempts + 1}, judge_problems={judge_problems[:200].encode('ascii', 'replace').decode('ascii')}")
+        state["critic_rejection_reasons"] = [f"[llm_judge] {judge_problems}"]
         state["critic_attempts"] = attempts + 1
         state["response_status"] = "rejected"
-
-        audit_log(
-            state,
-            "critic_rejected",
-            reason=rejections,
-        )
+        audit_log(state, "critic_rejected", reason=judge_problems[:200])
     else:
         state["final_response"] = draft
         state["critic_rejection_reasons"] = []
         state["response_status"] = "accepted"
-
         audit_log(state, "critic_accepted")
 
     return state

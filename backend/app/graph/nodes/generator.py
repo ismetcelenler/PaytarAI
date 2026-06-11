@@ -208,22 +208,38 @@ def generator_node(state: dict) -> dict:
             + "\nYukardaki sorunlari gidererek yeniden cevapla."
         )
 
-    # Context prompt — rol bazli sablon
-    template = CONTEXT_TEMPLATE_VET if user_role == "veterinarian" else CONTEXT_TEMPLATE_PRODUCER
+    # Context prompt — rol bazli sablon. Insufficient sablonu kaynaktan
+    # somut bilgi cikmadiginda model'in basvuracagi "fallback metni"; her iki
+    # sablonda da {insufficient_template} placeholderi var.
+    if user_role == "veterinarian":
+        template = CONTEXT_TEMPLATE_VET
+        insufficient = _INSUFFICIENT_VET
+    else:
+        template = CONTEXT_TEMPLATE_PRODUCER
+        insufficient = _INSUFFICIENT_PRODUCER
+
     context_msg = template.format(
         sources=sources_text,
         question=last_user_msg + rejection_context,
+        insufficient_template=insufficient,
     )
 
     # System prompt
     system_prompt = get_system_prompt(user_role)
 
     try:
+        # GROUNDING-FIRST KONFIGURASYONU:
+        # - temperature=0: deterministik
+        # - top_p=0.05: nucleus sampling cok dar — egitim hafizasindan rastgele
+        #   "ders kitabi" bilgisi sizmasini onler
+        # - reasoning_effort="medium": ADIM 1/2 checklist'i isletmek icin
+        #   biraz dusunce gerekiyor; "low" ise checklist atlanir
         llm = ChatOpenAI(
             api_key=settings.cerebras_api_key,
             base_url="https://api.cerebras.ai/v1",
             model="gpt-oss-120b",
             temperature=0,
+            top_p=0.05,
             max_tokens=3000,
             reasoning_effort="medium",  # type: ignore[call-arg]
         )
