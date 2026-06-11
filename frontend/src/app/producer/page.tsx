@@ -1,292 +1,173 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
-import { Send, Mic, Wheat, ArrowLeft } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
-import { Textarea } from "@/components/ui/textarea";
-import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import ReactMarkdown from "react-markdown";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
+import { usePaytarChat } from "@/hooks/use-paytar-chat";
+import { PaytarMark, PaytarWordmark } from "@/components/paytar/brand";
+import { PaytarComposer } from "@/components/paytar/composer";
+import {
+  AssistantBubble,
+  TypingIndicator,
+  UserBubble,
+} from "@/components/paytar/message";
 
-/* AI-PROMPT.md Section 5.1 — Semptom Kategorileri */
-const SYMPTOM_CATEGORIES = [
-  { id: "digestive", label: "Sindirim Sorunu", icon: "\ud83e\udec1", examples: ["Siskinlik", "Ishal", "Yemek yememe"] },
-  { id: "respiratory", label: "Solunum Sorunu", icon: "\ud83d\udca8", examples: ["Oksuruk", "Burun akintisi", "Nefes darligi"] },
-  { id: "limb", label: "Ayak / Hareket", icon: "\ud83e\uddb5", examples: ["Topallama", "Sislik", "Yurumeme"] },
-  { id: "skin", label: "Deri / Yara", icon: "\ud83e\ude79", examples: ["Yara", "Sislik", "Dokuntu"] },
-  { id: "milk", label: "Sut Sorunu", icon: "\ud83e\udd5b", examples: ["Sut azaldi", "Sut rengi degisti", "Meme sisligi"] },
-  { id: "birth", label: "Dogum / Yavru", icon: "\ud83d\udc04", examples: ["Dogum zorlugu", "Plasenta atmama", "Yavru emmeme"] },
-  { id: "general", label: "Genel Durum", icon: "\ud83c\udf21\ufe0f", examples: ["Ates", "Halsizlik", "Suruden ayrilma"] },
-  { id: "eye", label: "Goz Sorunu", icon: "\ud83d\udc41\ufe0f", examples: ["Goz akintisi", "Goz kizarikligi", "Gormeme"] },
-];
-
-interface Message {
+interface SymptomCat {
   id: string;
-  role: "user" | "assistant";
-  content: string;
-  timestamp: Date;
-  confidence?: string;
+  label: string;
+  icon: string;
+  examples: string[];
 }
 
+const SYMPTOM_CATEGORIES: SymptomCat[] = [
+  { id: "digestive", label: "Sindirim", icon: "🥣", examples: ["Şişkinlik", "İshal", "Yemek yememe"] },
+  { id: "respiratory", label: "Solunum", icon: "💨", examples: ["Öksürük", "Burun akıntısı", "Nefes darlığı"] },
+  { id: "limb", label: "Ayak / Hareket", icon: "🦵", examples: ["Topallama", "Şişlik", "Yürüyememe"] },
+  { id: "skin", label: "Deri / Yara", icon: "🩹", examples: ["Yara", "Şişlik", "Döküntü"] },
+  { id: "milk", label: "Süt", icon: "🥛", examples: ["Süt azaldı", "Süt rengi değişti", "Meme şişliği"] },
+  { id: "birth", label: "Doğum / Yavru", icon: "🐄", examples: ["Doğum zorluğu", "Plasenta atmama", "Yavru emmeme"] },
+  { id: "general", label: "Genel Durum", icon: "🌡️", examples: ["Ateş", "Halsizlik", "Sürüden ayrılma"] },
+  { id: "eye", label: "Göz", icon: "👁️", examples: ["Göz akıntısı", "Kızarıklık", "Görememe"] },
+];
+
 export default function ProducerDashboard() {
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [input, setInput] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-  const [showSymptomGuide, setShowSymptomGuide] = useState(true);
-  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const { messages, pending, error, send } = usePaytarChat("producer");
+  const [selectedCat, setSelectedCat] = useState<string | null>(null);
+  const [showGuide, setShowGuide] = useState(true);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [messages, isLoading]);
+  }, [messages, pending]);
 
-  const handleSymptomSelect = (categoryId: string, example: string) => {
-    const cat = SYMPTOM_CATEGORIES.find((c) => c.id === categoryId);
-    const query = `Hayvanimin ${cat?.label.toLowerCase()} var: ${example}`;
-    setShowSymptomGuide(false);
-    setInput("");
+  const isEmpty = messages.length === 0;
+  const showSymptomScreen = showGuide && isEmpty;
 
-    const userMsg: Message = {
-      id: Date.now().toString(),
-      role: "user",
-      content: query,
-      timestamp: new Date(),
-    };
-    setMessages([userMsg]);
-    sendMessage(query);
+  const sendQuery = (q: string) => {
+    setShowGuide(false);
+    send(q);
   };
 
-  const sendMessage = async (text: string) => {
-    setIsLoading(true);
-    try {
-      const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/api/v1/chat`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            message: text,
-            user_role: "producer",
-            input_source: "text",
-          }),
-        }
-      );
-      const data = await res.json();
-
-      const assistantMsg: Message = {
-        id: (Date.now() + 1).toString(),
-        role: "assistant",
-        content: data.response,
-        timestamp: new Date(),
-        confidence: data.evidence_confidence,
-      };
-      setMessages((prev) => [...prev, assistantMsg]);
-    } catch {
-      const errorMsg: Message = {
-        id: (Date.now() + 1).toString(),
-        role: "assistant",
-        content: "Baglanti hatasi. Sunucunun calistigini kontrol edin.",
-        timestamp: new Date(),
-      };
-      setMessages((prev) => [...prev, errorMsg]);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleSend = () => {
-    if (!input.trim() || isLoading) return;
-
-    const userMsg: Message = {
-      id: Date.now().toString(),
-      role: "user",
-      content: input,
-      timestamp: new Date(),
-    };
-    setMessages((prev) => [...prev, userMsg]);
-    const text = input;
-    setInput("");
-    if (showSymptomGuide) setShowSymptomGuide(false);
-    sendMessage(text);
+  const pickExample = (catId: string, ex: string) => {
+    const cat = SYMPTOM_CATEGORIES.find((c) => c.id === catId);
+    const q = `Hayvanımın ${cat?.label.toLowerCase()} sorunu var: ${ex}`;
+    sendQuery(q);
   };
 
   return (
-    <div className="flex flex-col h-screen bg-background">
-      {/* Header */}
-      <header className="border-b border-border px-4 py-3 flex items-center gap-3 bg-paytar-green">
-        <Link href="/" className="text-white hover:opacity-80 transition-opacity">
-          <ArrowLeft className="w-5 h-5" />
-        </Link>
-        <Wheat className="w-6 h-6 text-white" />
-        <h1 className="text-lg font-semibold text-white">PaytarAI</h1>
-        <Badge className="bg-white/20 text-white border-white/30 text-xs">
-          Uretici Modu
-        </Badge>
-        {!showSymptomGuide && (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="ml-auto text-white hover:bg-white/10"
-            onClick={() => {
-              setShowSymptomGuide(true);
-              setSelectedCategory(null);
-            }}
+    <div className="flex flex-col h-screen bg-paytar-bg text-paytar-ink font-sans">
+      {/* Top bar — sade üretici versiyonu */}
+      <header className="flex items-center justify-between px-4 py-3 bg-paytar-sidebar border-b border-paytar-line flex-shrink-0">
+        <div className="flex items-center gap-3">
+          <Link
+            href="/"
+            aria-label="Geri"
+            className="w-8 h-8 rounded-md flex items-center justify-center text-paytar-muted hover:bg-paytar-surface2"
+          >
+            <ArrowLeft className="w-4 h-4" />
+          </Link>
+          <div className="w-8 h-8 rounded-lg bg-paytar-accent flex items-center justify-center text-paytar-surface">
+            <PaytarMark size={20} />
+          </div>
+          <PaytarWordmark subtitle="ÜRETİCİ MODU" />
+        </div>
+        {!showSymptomScreen && (
+          <button
+            onClick={() => setShowGuide(true)}
+            className="font-mono text-[10px] tracking-wider uppercase text-paytar-accent-ink px-2.5 py-1 rounded-md hover:bg-paytar-surface2 transition-colors"
           >
             Semptom Rehberi
-          </Button>
+          </button>
         )}
       </header>
 
-      {/* Main Content */}
-      <div className="flex-1 flex flex-col overflow-hidden">
-        {showSymptomGuide ? (
-          /* Symptom Guide */
-          <ScrollArea className="flex-1 p-6">
+      {/* Main */}
+      <div className="flex-1 overflow-hidden flex flex-col">
+        {showSymptomScreen ? (
+          <div className="flex-1 overflow-y-auto py-8 px-5">
             <div className="max-w-lg mx-auto">
-              <h2 className="text-lg font-medium text-paytar-green-dark mb-2">
-                Hayvaninda ne goruyorsun?
+              <h2 className="font-serif text-3xl text-paytar-ink tracking-tight mb-1.5">
+                Hayvanında ne <span className="italic text-paytar-accent-ink">görüyorsun</span>?
               </h2>
-              <p className="text-sm text-muted-foreground mb-6">
-                Bir kategori sec, sonra detay ekleyebilirsin.
+              <p className="font-sans text-sm text-paytar-muted mb-6 leading-relaxed">
+                Bir kategori seç, sonra hangi belirti olduğunu seç. Paytar sana sade Türkçe ile cevap verecek.
               </p>
 
-              <div className="grid grid-cols-2 gap-3">
-                {SYMPTOM_CATEGORIES.map((cat) => (
-                  <button
-                    key={cat.id}
-                    id={`symptom-${cat.id}`}
-                    onClick={() =>
-                      setSelectedCategory(
-                        selectedCategory === cat.id ? null : cat.id
-                      )
-                    }
-                    className={`min-h-[48px] p-3 rounded-xl border text-left transition-all duration-200 ${
-                      selectedCategory === cat.id
-                        ? "border-paytar-green bg-paytar-sage shadow-sm"
-                        : "border-gray-200 bg-white hover:border-paytar-green hover:shadow-sm"
-                    }`}
-                  >
-                    <span className="text-2xl">{cat.icon}</span>
-                    <span className="block text-sm font-medium mt-1">
-                      {cat.label}
-                    </span>
-                    <span className="block text-xs text-muted-foreground mt-0.5">
-                      {cat.examples.join(" \u00b7 ")}
-                    </span>
-                  </button>
-                ))}
+              <div className="grid grid-cols-2 gap-2.5">
+                {SYMPTOM_CATEGORIES.map((cat) => {
+                  const active = selectedCat === cat.id;
+                  return (
+                    <button
+                      key={cat.id}
+                      onClick={() => setSelectedCat(active ? null : cat.id)}
+                      className={`min-h-[64px] p-3 rounded-xl border text-left transition-all ${
+                        active
+                          ? "border-paytar-accent bg-paytar-accent-soft"
+                          : "border-paytar-line bg-paytar-surface hover:border-paytar-accent/40"
+                      }`}
+                    >
+                      <span className="text-2xl block">{cat.icon}</span>
+                      <span className="block font-sans text-sm font-medium text-paytar-ink mt-1">
+                        {cat.label}
+                      </span>
+                      <span className="block font-sans text-[11.5px] text-paytar-muted mt-0.5 leading-snug">
+                        {cat.examples.join(" · ")}
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
 
-              {/* Detail Step */}
-              {selectedCategory && (
-                <div className="mt-6 p-4 bg-paytar-sage/30 rounded-xl border border-paytar-green/20">
-                  <p className="text-sm font-medium text-paytar-green-dark mb-3">
-                    Hangi belirtiyi goruyorsun?
+              {selectedCat && (
+                <div className="mt-6 p-4 bg-paytar-accent-soft rounded-xl border border-paytar-accent/30">
+                  <p className="font-sans text-sm font-medium text-paytar-accent-ink mb-3">
+                    Hangi belirtiyi görüyorsun?
                   </p>
                   <div className="flex flex-wrap gap-2">
-                    {SYMPTOM_CATEGORIES.find(
-                      (c) => c.id === selectedCategory
-                    )?.examples.map((ex) => (
-                      <button
-                        key={ex}
-                        onClick={() =>
-                          handleSymptomSelect(selectedCategory, ex)
-                        }
-                        className="px-4 py-2 rounded-full bg-white border border-paytar-green/30 text-sm text-paytar-green-dark hover:bg-paytar-green hover:text-white transition-colors min-h-[44px]"
-                      >
-                        {ex}
-                      </button>
-                    ))}
+                    {SYMPTOM_CATEGORIES.find((c) => c.id === selectedCat)?.examples.map(
+                      (ex) => (
+                        <button
+                          key={ex}
+                          onClick={() => pickExample(selectedCat, ex)}
+                          className="px-3.5 py-2 rounded-full bg-paytar-surface border border-paytar-accent/40 font-sans text-sm text-paytar-ink hover:bg-paytar-accent hover:text-paytar-surface hover:border-paytar-accent transition-colors"
+                        >
+                          {ex}
+                        </button>
+                      )
+                    )}
                   </div>
                 </div>
               )}
             </div>
-          </ScrollArea>
+          </div>
         ) : (
-          /* Chat Feed */
-          <div ref={scrollRef} className="flex-1 overflow-y-auto p-6">
-            <div className="space-y-4 max-w-lg mx-auto">
-              {messages.map((msg) => (
-                <div
-                  key={msg.id}
-                  className={`flex ${
-                    msg.role === "user" ? "justify-end" : "justify-start"
-                  }`}
-                >
-                  <div
-                    className={`max-w-[85%] rounded-2xl px-4 py-3 ${
-                      msg.role === "user"
-                        ? "bg-paytar-green text-white"
-                        : "bg-muted border border-border"
-                    }`}
-                  >
-                    {msg.role === "assistant" ? (
-                      <div className="prose prose-sm max-w-none dark:prose-invert">
-                        <ReactMarkdown>{msg.content}</ReactMarkdown>
-                      </div>
-                    ) : (
-                      <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
-                    )}
-                  </div>
-                </div>
-              ))}
-              {isLoading && (
-                <div className="flex justify-start">
-                  <div className="bg-muted border border-border rounded-2xl px-4 py-3">
-                    <div className="flex items-center gap-2">
-                      <div className="flex gap-1">
-                        <span className="w-2 h-2 bg-paytar-green/40 rounded-full animate-bounce" />
-                        <span className="w-2 h-2 bg-paytar-green/40 rounded-full animate-bounce [animation-delay:0.15s]" />
-                        <span className="w-2 h-2 bg-paytar-green/40 rounded-full animate-bounce [animation-delay:0.3s]" />
-                      </div>
-                      <span className="text-xs text-muted-foreground ml-2">Dusunuyor...</span>
-                    </div>
-                  </div>
+          <div ref={scrollRef} className="flex-1 overflow-y-auto py-6 px-5">
+            <div className="max-w-lg mx-auto">
+              {messages.map((m) =>
+                m.role === "user" ? (
+                  <UserBubble key={m.id}>{m.content}</UserBubble>
+                ) : (
+                  <AssistantBubble key={m.id} message={m} showActions={false} />
+                )
+              )}
+              {pending && <TypingIndicator />}
+              {error && (
+                <div className="font-mono text-[11px] text-destructive bg-destructive/10 border border-destructive/30 rounded-md px-3 py-2 mt-2">
+                  {error}
                 </div>
               )}
             </div>
           </div>
         )}
 
-        {/* Input Area (always visible) */}
-        <div className="border-t border-border p-4 bg-background">
-          <div className="max-w-lg mx-auto flex gap-3 items-end">
-            <Button
-              id="producer-voice-btn"
-              variant="outline"
-              size="icon"
-              className="min-w-[56px] min-h-[56px] rounded-full border-paytar-green/30 text-paytar-green hover:bg-paytar-green hover:text-white transition-colors"
-              title="Sesli komut"
-            >
-              <Mic className="w-6 h-6" />
-            </Button>
-            <Textarea
-              id="producer-chat-input"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  handleSend();
-                }
-              }}
-              placeholder="Sorunuzu yazin..."
-              className="min-h-[48px] max-h-[100px] resize-none"
-              rows={1}
-            />
-            <Button
-              id="producer-send-btn"
-              onClick={handleSend}
-              disabled={!input.trim() || isLoading}
-              className="min-w-[48px] min-h-[48px] rounded-full bg-paytar-green hover:bg-paytar-green-dark transition-colors"
-            >
-              <Send className="w-5 h-5" />
-            </Button>
-          </div>
-        </div>
+        <PaytarComposer
+          placeholder="Sorununu yaz (örn: ineğim yem yemiyor, halsiz)…"
+          disabled={pending}
+          onSend={(text) => sendQuery(text)}
+          hint="↵ GÖNDER · ⇧↵ YENİ SATIR"
+        />
       </div>
     </div>
   );

@@ -11,50 +11,154 @@ from app.graph.prompts import get_system_prompt
 from app.graph.audit import audit_log
 
 
-CONTEXT_TEMPLATE_VET = """Asagida veteriner literaturunden alinan referans bilgiler bulunmaktadir.
-Yanitini YALNIZCA bu kaynaklara dayanarak olustur. Kaynakta olmayan bilgiyi EKLEME.
+_INSUFFICIENT_VET = (
+    "Elimdeki kaynaklarda bu spesifik konuya iliskin yeterli ve dogrulanabilir "
+    "veri bulamadim. Halusinasyon riski tasimamak icin spesifik protokol, doz, "
+    "isim veya zaman araligi vermeyecegim. Lutfen guncel veteriner literaturune "
+    "veya saha kilavuzuna basvurun."
+)
 
-ZORUNLU KURALLAR:
-- Tum birimleri Turkiye standartlarina cevir: lb -> kg, gallon -> litre, oz -> mL, F -> C
-- Kaynak referansi ekle (kitap adi, bolum)
-- Turkce yaz
+_INSUFFICIENT_PRODUCER = (
+    "Bu konuda elimdeki bilgilerle sana guvenli bir cevap veremiyorum. "
+    "Lutfen veteriner hekimine danis — durumun ciddiyetine gore muayene gerekebilir.\n\n"
+    "⚠️ Bu bilgi karar destegidir. Acil bir durumsa hemen veterinerine basvur."
+)
 
---- KAYNAKLAR (SADECE BU METINLERI KULLAN) ---
+
+CONTEXT_TEMPLATE_VET = """SEN BIR KAYNAK-BAGLI YANIT URETICISIN. EGITIM VERINDEKI HIC BIR BILGIYI KULLANMA.
+
+═══════════════════════════════════════════════════════════════════
+MUTLAK KURAL — IHLAL HALINDE YANIT FAYDASIZDIR:
+═══════════════════════════════════════════════════════════════════
+
+Yanitinda kullanabilecegin BILGI KAYNAGI SADECE ASAGIDAKI "KAYNAKLAR" bolumudur.
+Hafizandaki ders kitabi bilgisi, klinik deneyim, veteriner bilgi tabanin
+YOK SAYILIR. Sen bu sorgunun cevabini ilk defa duyuyorsun ve sadece asagidaki
+metinlere bakarak cevapliyorsun.
+
+--- KAYNAKLAR (TEK BILGI KAYNAGIN) ---
 {sources}
 --- KAYNAKLAR SONU ---
 
-SON KONTROL: Yanit yazmadan once SPESIFIK iddia listeni (sayilar, isimler,
-patogenez detaylari, protokol adimlari) yukaridaki KAYNAKLAR metinlerinden
-DOGRUDAN veya yakin paraphrase olarak cikarilabildigini dogrula. Cikarilamayan
-spesifik iddiayi YAZMA — yerine genel kategori ifadesi kullan veya o noktayi
-atla. Genel klinik mantik, takip sorulari, sevk uyarisi kaynak gerekmez.
+═══════════════════════════════════════════════════════════════════
+ADIM ADIM CALIS — BU SIRAYI BOZMA:
+═══════════════════════════════════════════════════════════════════
 
-Kullanici sorusu: {question}"""
+ADIM 1 — KAYNAK TARAMA:
+Kullanicinin sorusunu oku. Sonra yukaridaki KAYNAKLAR'i bastan sona oku.
+Sorunun cevabina dair SOMUT bilgi var mi? "Somut bilgi" demek:
+  • Spesifik isim (asilama takvimi sorusunda "Brucella S19 asisi" yaziyor mu?
+    Mastitis sorusunda "cefquinome" yaziyor mu?)
+  • Spesifik sayi (yas araligi "1-2 aylik", doz "10 mg/kg", aralik "3 hafta")
+  • Spesifik protokol adimi (siralanmis adimlar, kosullar)
+  • Spesifik tani kriteri
+
+ADIM 2 — KARAR:
+A) KAYNAKLARDA SOMUT BILGI VAR → Yanit yaz. Her cumlede kullanacagin
+   her sayi, isim, protokol adimi icin "bu kaynaklarda HANGI CUMLEDE geciyor"
+   sorusunu KENDINE sor; gecmiyorsa o iddiayi sil.
+
+B) KAYNAKLARDA SADECE GENEL CERCEVE VAR (orn: "asi takvimi onemlidir" diyor
+   ama hangi asi-hangi yas-hangi aralik anlatmiyor) → SOMUT iddia URETME.
+   Su sablonu AYNEN yaz ve bitir:
+
+   ───────────────────────────────────────────────────
+   {insufficient_template}
+   ───────────────────────────────────────────────────
+
+   Kaynaklarda gecen GENEL bir cerceveyi 2-3 cumleyle ozetleyebilirsin ama
+   spesifik isim/sayi/protokol UYDURMA.
+
+C) KAYNAKLAR SORUYA TAMAMEN ALAKASIZ → B sablonunu kullan.
+
+═══════════════════════════════════════════════════════════════════
+KESIN YASAK — IHLAL HALINDE CRITIC REDDEDER:
+═══════════════════════════════════════════════════════════════════
+
+✗ Kaynaklarda gecmeyen ASI/ILAC ADI yazma (Brucella S19, Theileria, IBR, PI3,
+  BVD, BRSV, J-5, Pasteurella, Mannheimia, klostridial vb. — KAYNAK METNINDE
+  bu kelimeyi GORMUYORSAN YAZMA)
+✗ Kaynaklarda gecmeyen YAS ARALIGI yazma (1-2 aylik, 3-6 aylik, 9-12 aylik vb.)
+✗ Kaynaklarda gecmeyen SURE/ARALIK yazma (3 hafta arayla, 6 ayda bir, yilda 1 doz vb.)
+✗ Kaynaklarda gecmeyen DOZ yazma (mg/kg, ml/kg, IV/IM/SC enjeksiyon)
+✗ Kaynaklarda gecmeyen TARIH/MEVSIM yazma (Mart-Nisan, kene mevsimi vb.)
+✗ Egitim verisinden "standart bilgi" ekleme — bu sistem TEZ icin gelistirildi,
+  egitim verisi degil sadece RAG kaynaklari muhasebe edilir.
+
+═══════════════════════════════════════════════════════════════════
+KAYNAK KULLANIRKEN:
+═══════════════════════════════════════════════════════════════════
+
+• Birim donusumu: lb→kg, gallon→litre, oz→mL, F→C
+• Yanitin SONUNDA tek satir: "Kaynak: [Kitap Adi], ilgili bolum"
+• Inline [Kaynak N] etiketleri YASAK
+• Turkce yaz
+• Yanit 6 paragrafi gecmesin
+
+KULLANICI SORUSU:
+{question}
+
+SIMDI ADIM 1'i UYGULA: Once KAYNAKLAR'i tara, sonra ADIM 2'deki A/B/C karari ver."""
 
 
-CONTEXT_TEMPLATE_PRODUCER = """Asagida arka planda kullanacagin referans bilgiler var. Bu kaynaklar yalnizca SENIN icin —
-ciftciye bu kaynaklardan, kitap adlarindan, "[Kaynak 1]" gibi etiketlerden veya tablo numaralarindan
-ASLA bahsetme. Yanitini bu kaynaklara dayandir ama metnin disardan bakildiginda
-arka planda kaynak oldugunu HISSETTIRMESIN.
+CONTEXT_TEMPLATE_PRODUCER = """SEN BIR KAYNAK-BAGLI YANIT URETICISIN. EGITIM VERINDEKI HIC BIR BILGIYI KULLANMA.
 
-ZORUNLU KURALLAR:
-- Tum birimleri Turkiye standartlarina cevir: lb -> kg, gallon -> litre, oz -> mL, F -> C
-- Sade Turkce ile yaz, tablo kullanma
-- Kaynak kelimesini bile yazma
+═══════════════════════════════════════════════════════════════════
+MUTLAK KURAL — IHLAL HALINDE YANIT FAYDASIZDIR:
+═══════════════════════════════════════════════════════════════════
 
---- KAYNAKLAR (sadece senin icin, SADECE BU METINLERI KULLAN) ---
+Yanitinda kullanabilecegin BILGI KAYNAGI SADECE ASAGIDAKI "KAYNAKLAR" bolumudur.
+Bunlar ARKA PLAN bilgisi — ciftciye kaynaklardan, kitap adlarindan,
+"[Kaynak N]" etiketlerinden BAHSETME, ama yanitin bu metinlere dayanmali.
+
+--- KAYNAKLAR (TEK BILGI KAYNAGIN, ciftciye gostermeyeceksin) ---
 {sources}
 --- KAYNAKLAR SONU ---
 
-SON KONTROL: Yanit yazmadan once SPESIFIK iddia listeni (sayilar, ilac/marka
-adi, dozaj, satin alma yeri, belirli zaman/miktar adimlari) yukaridaki
-KAYNAKLAR metinlerinden DOGRUDAN cikarilabildigini dogrula. Cikarilamayan
-spesifik iddiayi YAZMA — yerine genel kategori ifadesi kullan ("veterinerin
-uygun gordugu tedavi", "veterinerin onerdigi miktarda") veya o noktayi atla.
-Genel oneri, kategori adi, tehlike isareti, gozlem talimati, hijyen onerisi
-kaynak gerekmez.
+═══════════════════════════════════════════════════════════════════
+ADIM ADIM CALIS:
+═══════════════════════════════════════════════════════════════════
 
-Ciftcinin sorusu: {question}"""
+ADIM 1 — KAYNAK TARAMA: Soruyu oku. KAYNAKLAR'da SOMUT bilgi var mi?
+  • Spesifik miktar/sure/sicaklik
+  • Spesifik urun/marka/ilac kategorisi
+  • Spesifik protokol adimi
+
+ADIM 2 — KARAR:
+A) SOMUT BILGI VAR → Sade Turkce ile aktar.
+B) SADECE GENEL CERCEVE VAR (somut detay yok) → SOMUT iddia URETME. Su sablonu
+   AYNEN yaz ve bitir:
+
+   ───────────────────────────────────────────────────
+   {insufficient_template}
+   ───────────────────────────────────────────────────
+
+C) KAYNAK SORUYA ALAKASIZ → B sablonunu kullan.
+
+═══════════════════════════════════════════════════════════════════
+KESIN YASAK:
+═══════════════════════════════════════════════════════════════════
+
+✗ Kaynaklarda gecmeyen miktar/sure/sicaklik UYDURMA
+  (orn: "2 saatte bir 500 mL" — kaynakta yoksa YAZMA)
+✗ Kaynaklarda gecmeyen urun/marka ismi UYDURMA
+✗ Egitim verisinden "halk dilinde boyle yapilir" diye standart ekleme
+✗ "Kaynak", "kitap", "[Kaynak 1]" gibi etiketler YAZMA
+✗ Receteli ilac adi + doz YAZMA (vet karari)
+✗ Markdown tablo KULLANMA
+
+═══════════════════════════════════════════════════════════════════
+KAYNAK YETERLIYSE:
+═══════════════════════════════════════════════════════════════════
+
+• Birim donusumu: lb→kg, gallon→litre, oz→mL, F→C
+• Sade Turkce, Latince/teknik terim yok
+• 3-5 maddeli numarali liste + tehlike isaretleri + disclaimer
+
+CIFTCININ SORUSU:
+{question}
+
+SIMDI ADIM 1'i UYGULA: Once KAYNAKLAR'i tara, sonra ADIM 2'deki A/B/C karari ver."""
 
 
 def generator_node(state: dict) -> dict:

@@ -189,3 +189,62 @@
     @apply font-sans;
   }
 }
+
+/* PaytarAI markdown gövdesi — Çayır tipografisi */
+.paytar-prose p { margin: 0 0 12px; }
+.paytar-prose p:last-child { margin-bottom: 0; }
+.paytar-prose h1,
+.paytar-prose h2,
+.paytar-prose h3 {
+  font-family: var(--font-serif), Georgia, serif;
+  font-weight: 400;
+  line-height: 1.2;
+  letter-spacing: -0.005em;
+  color: var(--cayir-ink);
+  margin: 18px 0 8px;
+}
+.paytar-prose h1 { font-size: 26px; }
+.paytar-prose h2 { font-size: 22px; }
+.paytar-prose h3 { font-size: 19px; }
+.paytar-prose ul,
+.paytar-prose ol {
+  margin: 4px 0 12px;
+  padding-left: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.paytar-prose ul { list-style: none; padding-left: 0; }
+.paytar-prose ul li {
+  position: relative;
+  padding-left: 18px;
+  line-height: 1.55;
+}
+.paytar-prose ul li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 11px;
+  width: 6px;
+  height: 1px;
+  background: var(--cayir-accent);
+}
+.paytar-prose ol li { padding-left: 4px; line-height: 1.55; }
+.paytar-prose strong { color: var(--cayir-ink); font-weight: 600; }
+.paytar-prose em { color: var(--cayir-accent-ink); font-style: italic; }
+.paytar-prose code {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 13px;
+  padding: 1px 5px;
+  background: var(--cayir-surface2);
+  border-radius: 4px;
+  color: var(--cayir-accent-ink);
+}
+.paytar-prose a { color: var(--cayir-accent-ink); text-decoration: underline; }
+.paytar-prose blockquote {
+  border-left: 2px solid var(--cayir-accent);
+  padding-left: 14px;
+  margin: 10px 0;
+  color: var(--cayir-ink2);
+  font-style: italic;
+}
