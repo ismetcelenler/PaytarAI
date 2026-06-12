@@ -13,12 +13,29 @@ Reference: MEGA-RAG (PMC 2026), Multi-HyDE (arxiv 2509.16369),
 Step-Back (DeepMind 2024), Hybrid BM25+Dense 2026 production guide.
 """
 
+import time
+
 from app.rag.embeddings import embed_single
 from app.rag.qdrant_store import search
 from app.rag.step_back import generate_step_back
 from app.rag.bm25_store import bm25_search
 from app.rag.reranker import rerank
 from app.graph.audit import audit_log
+from app.graph.debug_trace import trace_node
+
+
+def _snapshot_chunks(chunks: list[dict], top_n: int = 10) -> list[dict]:
+    """Bir kanaldan gelen chunk listesini debug trace icin kucuk snapshot'a indirger."""
+    out = []
+    for c in chunks[:top_n]:
+        meta = c.get("metadata", {}) or {}
+        out.append({
+            "title": meta.get("source_title", "?"),
+            "score": round(float(c.get("score") or 0.0), 4),
+            "text_preview": (c.get("text", "") or "")[:300],
+            "text_len": len(c.get("text", "") or ""),
+        })
+    return out
 
 
 # Dense retrieval'da kac chunk getirelim — reranker bunu top-3'e indirir.
@@ -88,13 +105,9 @@ def _merge_bm25(dense_results: list[dict], bm25_results: list[dict], limit: int)
 
 def retriever_node(state: dict) -> dict:
     """
-    Retriever node — dual language search.
-
-    1. Orijinal sorguyla arar
-    2. Sorguyu diger dile cevirir (Groq, ucretsiz)
-    3. Cevrilmis sorguyla tekrar arar
-    4. Sonuclari birlestirip en iyi 5'i alir
+    Retriever node — hybrid multi-channel retrieval.
     """
+    t0 = time.perf_counter()
     messages = state.get("messages", [])
     if not messages:
         return state
@@ -244,6 +257,49 @@ def retriever_node(state: dict) -> dict:
             f"rerank_top={state.get('rerank_top_score', 0.0):.4f}"
         ),
         source_ids=[r["metadata"].get("source_title", "") for r in final_docs],
+    )
+
+    # Debug trace — KANAL kanal cikti + pre/post rerank
+    latency_ms = (time.perf_counter() - t0) * 1000
+    final_snapshot = []
+    for d in final_docs:
+        meta = d.get("metadata", {}) or {}
+        final_snapshot.append({
+            "title": meta.get("source_title", "?"),
+            "dense_score": round(float(d.get("score") or 0.0), 4),
+            "rerank_logit": round(float(d.get("rerank_logit") or 0.0), 4),
+            "rerank_sigmoid": round(float(d.get("rerank_score") or 0.0), 4),
+            "text_full": d.get("text", "") or "",
+            "text_len": len(d.get("text", "") or ""),
+        })
+
+    trace_node(
+        state,
+        "retriever",
+        input={
+            "user_query": last_user_msg,
+            "enriched_keywords": enriched_query,
+            "hyde_variants": hyde_variants,
+            "step_back_query": step_back_query,
+            "rerank_query": (f"{last_user_msg} | {enriched_query}" if enriched_query else last_user_msg) if candidates else "",
+        },
+        output={
+            "channels": {
+                "original_dense":  _snapshot_chunks(original_results, top_n=10),
+                "enriched_dense":  _snapshot_chunks(translated_results, top_n=10),
+                "hyde_dense":      _snapshot_chunks(hyde_results_all, top_n=10),
+                "step_back_dense": _snapshot_chunks(step_back_results, top_n=10),
+                "bm25_sparse":     _snapshot_chunks(bm25_results, top_n=10),
+            },
+            "candidates_count": len(candidates),
+            "candidates_top10": _snapshot_chunks(candidates, top_n=10),
+            "reranked_top_k": final_snapshot,
+            "scores": {
+                "dense_top": round(dense_top_cosine, 4),
+                "rerank_top": round(state.get("rerank_top_score", 0.0), 4),
+            },
+        },
+        latency_ms=latency_ms,
     )
 
     return state

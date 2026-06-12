@@ -21,6 +21,7 @@ class ChatRequest(BaseModel):
     thread_id: str | None = None
     animal_weight_kg: float | None = None
     input_source: str = "text"  # "text" | "voice"
+    debug: bool = False  # True ise debug_trace + tum chunk metinleri dondurulur
 
 
 class ChatResponse(BaseModel):
@@ -32,6 +33,10 @@ class ChatResponse(BaseModel):
     critic_attempts: int = 0
     audit_entry_count: int = 0
     audit_log: list[dict] = []
+    debug_trace: list[dict] = []
+    grounding_action: str | None = None
+    retrieval_similarity_score: float = 0.0
+    rerank_top_score: float = 0.0
 
 
 @router.post("/chat", response_model=ChatResponse)
@@ -44,7 +49,6 @@ async def chat(request: ChatRequest):
     request_id = str(uuid.uuid4())[:8]
     thread_id = request.thread_id or str(uuid.uuid4())[:12]
 
-    # Initial state olustur
     initial_state = {
         "messages": [
             {"role": "user", "content": request.message},
@@ -59,6 +63,7 @@ async def chat(request: ChatRequest):
         "input_source": request.input_source,
         "evidence_confidence": "insufficient",
         "audit_log": [],
+        "debug_trace": [],
         "draft_response": "",
         "critic_rejection_reasons": [],
         "final_response": "",
@@ -74,23 +79,40 @@ async def chat(request: ChatRequest):
         workflow = get_workflow()
         result = workflow.invoke(initial_state)
 
-        # Kaynak bilgilerini cikart
+        # Kaynak bilgilerini cikart — debug ise tam metin, prod ise kisa snippet
         sources = []
+        snippet_len = 800 if request.debug else 200
         for doc in result.get("retrieved_docs", [])[:3]:
             sources.append({
                 "title": doc["metadata"].get("source_title", ""),
                 "score": round(doc["score"], 4),
-                "snippet": doc["text"][:200],
+                "snippet": doc["text"][:snippet_len],
             })
 
+        # Debug=true ise tum trace + scores; degilse minimal
+        debug_trace = result.get("debug_trace", []) if request.debug else []
+
+        # v4 (critic kaldirildi): final_response artik critic tarafindan set
+        # edilmiyor. Eger out_of_scope/confidence_gate template set ettiyse onu
+        # kullan; aksi halde grounding'in temizledigi draft_response'u don.
+        response_text = (
+            result.get("final_response")
+            or result.get("draft_response")
+            or "Yanit uretilemedi."
+        )
+
         return ChatResponse(
-            response=result.get("final_response", result.get("draft_response", "Yanit uretilemedi.")),
+            response=response_text,
             thread_id=thread_id,
             evidence_confidence=result.get("evidence_confidence", "insufficient"),
             sources=sources,
             critic_attempts=result.get("critic_attempts", 0),
             audit_entry_count=len(result.get("audit_log", [])),
             audit_log=result.get("audit_log", []),
+            debug_trace=debug_trace,
+            grounding_action=result.get("grounding_action"),
+            retrieval_similarity_score=result.get("retrieval_similarity_score", 0.0),
+            rerank_top_score=result.get("rerank_top_score", 0.0),
         )
 
     except Exception as e:

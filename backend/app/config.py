@@ -29,6 +29,12 @@ class Settings(BaseSettings):
     # ----- Cerebras (gpt-oss-120b high reasoning — generator + enrich_query) -----
     cerebras_api_key: str = ""
 
+    # ----- OpenRouter (multi-model gateway, OpenAI-compatible API) -----
+    # base_url: https://openrouter.ai/api/v1
+    # Example models: "meta-llama/llama-3.3-70b-instruct",
+    # "anthropic/claude-3.5-sonnet", "openai/gpt-4o"
+    openrouter_api_key: str = ""
+
     # ----- Qdrant Cloud -----
     qdrant_url: str = ""
     qdrant_api_key: str = ""

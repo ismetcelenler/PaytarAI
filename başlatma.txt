@@ -1,0 +1,8 @@
+cd c:\Projects\Github_Repo\Bitirme_PaytarAI\backend
+.\.venv\Scripts\Activate.ps1
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+
+
+
+cd c:\Projects\Github_Repo\Bitirme_PaytarAI\frontend
+npm run dev

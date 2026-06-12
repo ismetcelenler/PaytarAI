@@ -20,11 +20,13 @@ Akis:
 
 import json
 import re
+import time
 
 from langchain_openai import ChatOpenAI
 
 from app.config import settings
 from app.graph.audit import audit_log
+from app.graph.debug_trace import trace_node, trim_text
 
 
 # ---------------------------------------------------------------
@@ -130,21 +132,20 @@ def _llm_judge_check(
     docs: list[dict],
     user_role: str,
     user_query: str = "",
-) -> tuple[str | None, bool]:
+) -> tuple[str | None, bool, dict]:
     """
     LLM-as-judge.
 
     Donen tuple:
-      - problems: judge'in tespit ettigi sorunlarin string'i ("; " ile ayrilmis)
-        veya None (sorun yok)
-      - judge_succeeded: judge cagrisinin GERCEKTEN tamamlandigini gosterir.
-        False ise (Cerebras exception, JSON parse fail, cok kisa draft) ARAYAN
-        TARAF FAIL-CLOSED davranmali — silent fail'e izin verme.
+      - problems: judge'in tespit ettigi sorunlarin string'i veya None
+      - judge_succeeded: judge cagrisinin GERCEKTEN tamamlandigini gosterir
+      - debug: {prompt, raw_response, parsed_json, error} — trace icin
     """
-    # Cok kisa draft → judge anlamsiz olur, ama bu durumda fail-closed olmamali
-    # cunku draft zaten "Soru anlasilamadi" gibi sistem mesaji.
+    debug: dict = {}
+
     if not draft or len(draft) < 20:
-        return None, True  # gercek skip, fail degil
+        debug["skipped"] = "draft too short"
+        return None, True, debug
 
     source_text_full = " ".join(d.get("text", "") for d in docs)
     source_text_lower = source_text_full.lower()
@@ -160,18 +161,25 @@ def _llm_judge_check(
         sources=sources_for_judge,
         draft=draft[:2000],
     )
+    debug["prompt"] = prompt
+    debug["source_has_emergency"] = source_has_emergency
 
     try:
         llm = ChatOpenAI(
-            api_key=settings.cerebras_api_key,
-            base_url="https://api.cerebras.ai/v1",
-            model="gpt-oss-120b",
+            api_key=settings.openrouter_api_key,
+            base_url="https://openrouter.ai/api/v1",
+            model="openai/gpt-oss-120b",
             temperature=0,
             max_tokens=800,
             reasoning_effort="low",  # type: ignore[call-arg]
+            default_headers={
+                "HTTP-Referer": "https://github.com/paytar-ai",
+                "X-Title": "PaytarAI",
+            },
         )
         response = llm.invoke(prompt)
         content = str(response.content).strip()
+        debug["raw_response"] = content
 
         m = re.search(r"\{[\s\S]*\}", content)
         if not m:
@@ -179,9 +187,11 @@ def _llm_judge_check(
                 f"[LLM-JUDGE-DEBUG] JSON parse edilemedi (FAIL-CLOSED). "
                 f"Raw: {content[:200].encode('ascii', 'replace').decode('ascii')}"
             )
-            return None, False  # parse fail → fail-closed
+            debug["parse_error"] = True
+            return None, False, debug
 
         result = json.loads(m.group())
+        debug["parsed_json"] = result
         print(
             f"[LLM-JUDGE-DEBUG] role={user_role}, emergency={source_has_emergency}, "
             f"result={json.dumps(result, ensure_ascii=True)}"
@@ -216,12 +226,13 @@ def _llm_judge_check(
                 "bilgiyi kullan"
             )
 
-        return ("; ".join(problems) if problems else None), True
+        debug["problems"] = problems
+        return ("; ".join(problems) if problems else None), True, debug
 
     except Exception as e:
-        # FAIL-CLOSED: judge cagrisi patladi, critic'in atlanmasina IZIN VERME
         print(f"[critic LLM-judge] HATA (FAIL-CLOSED): {e}")
-        return None, False
+        debug["error"] = str(e)[:300]
+        return None, False, debug
 
 
 # ---------------------------------------------------------------
@@ -231,24 +242,13 @@ def _llm_judge_check(
 def critic_node(state: dict) -> dict:
     """
     Critic — tek katmanli, LLM-judge tabanli kalite kontrolu.
-
-    Akis:
-      1) Generator fallback → critic skip (statik guvenli metin)
-      2) Judge cagir
-         - fail (exception/parse) → FAIL-CLOSED: reject + retry; retry'da yine
-           fail ise SAFE FALLBACK
-         - succeeded + sorun yok → accept
-         - succeeded + sorun var:
-              attempts=0 → reject + retry
-              attempts>=1: grounded/relevance fail → SAFE FALLBACK;
-                           sadece stil → kabul
     """
+    t0 = time.perf_counter()
     draft = state.get("draft_response", "")
     docs = state.get("retrieved_docs", [])
     user_role = state.get("user_role", "producer")
     attempts = state.get("critic_attempts", 0)
 
-    # Son kullanici mesajini cikar — judge'in answer_relevant kontrolu icin
     user_query = ""
     for msg in reversed(state.get("messages", [])):
         if isinstance(msg, dict) and msg.get("role") == "user":
@@ -263,9 +263,13 @@ def critic_node(state: dict) -> dict:
         state["final_response"] = draft
         state["response_status"] = "accepted"
         audit_log(state, "critic_skip_fallback", reason="Generator fallback metni (statik)")
+        trace_node(state, "critic",
+                   input={"draft": trim_text(draft), "attempts": attempts},
+                   output={"decision": "skip_fallback"},
+                   latency_ms=(time.perf_counter() - t0) * 1000)
         return state
 
-    judge_problems, judge_ok = _llm_judge_check(draft, docs, user_role, user_query=user_query)
+    judge_problems, judge_ok, judge_debug = _llm_judge_check(draft, docs, user_role, user_query=user_query)
     is_hallucination_sig = (
         judge_problems is not None
         and any(sig in judge_problems for sig in _HALLUCINATION_SIGNATURES)
@@ -294,6 +298,9 @@ def critic_node(state: dict) -> dict:
                 "critic_rejected",
                 reason="LLM-judge silent fail — fail-closed retry tetiklendi",
             )
+        _emit_trace(state, t0, draft, attempts, user_role, user_query,
+                    judge_problems, judge_ok, judge_debug,
+                    decision=state["response_status"])
         return state
 
     # ── RETRY YOLU ──────────────────────────────────────────────
@@ -308,7 +315,6 @@ def critic_node(state: dict) -> dict:
                 reason=f"Retry sonrasi grounded/relevance fail: {judge_problems[:150] if judge_problems else ''}",
             )
         else:
-            # Sadece stil sorunlari kabul (latency koruma)
             state["final_response"] = draft
             state["response_status"] = "accepted_after_max_retries"
             audit_log(
@@ -316,6 +322,9 @@ def critic_node(state: dict) -> dict:
                 "critic_max_retries",
                 reason=f"Stil sorunlari kabul: {(judge_problems or '(yok)')[:150]}",
             )
+        _emit_trace(state, t0, draft, attempts, user_role, user_query,
+                    judge_problems, judge_ok, judge_debug,
+                    decision=state["response_status"])
         return state
 
     # ── ILK GECIS ───────────────────────────────────────────────
@@ -331,4 +340,35 @@ def critic_node(state: dict) -> dict:
         state["response_status"] = "accepted"
         audit_log(state, "critic_accepted")
 
+    _emit_trace(state, t0, draft, attempts, user_role, user_query,
+                judge_problems, judge_ok, judge_debug,
+                decision=state["response_status"])
     return state
+
+
+def _emit_trace(state, t0, draft, attempts, user_role, user_query,
+                judge_problems, judge_ok, judge_debug, decision):
+    """Critic node icin debug trace ekle."""
+    trace_node(
+        state, "critic",
+        input={
+            "draft": trim_text(draft, 2000),
+            "user_query": user_query,
+            "user_role": user_role,
+            "attempts_in": attempts,
+            "docs_count": len(state.get("retrieved_docs", [])),
+        },
+        output={
+            "decision": decision,
+            "judge_ok": judge_ok,
+            "judge_problems": judge_problems,
+            "judge_prompt": trim_text(judge_debug.get("prompt", ""), 2500),
+            "judge_raw_response": trim_text(judge_debug.get("raw_response", ""), 1200),
+            "judge_parsed_json": judge_debug.get("parsed_json"),
+            "judge_error": judge_debug.get("error"),
+            "judge_parse_error": judge_debug.get("parse_error"),
+            "judge_skipped": judge_debug.get("skipped"),
+            "source_has_emergency": judge_debug.get("source_has_emergency"),
+        },
+        latency_ms=(time.perf_counter() - t0) * 1000,
+    )

@@ -51,14 +51,19 @@ _sb_llm: ChatOpenAI | None = None
 
 
 def _get_sb_llm() -> ChatOpenAI:
+    """OpenRouter llama-3.3-70b-instruct (paid tier)."""
     global _sb_llm
     if _sb_llm is None:
         _sb_llm = ChatOpenAI(
-            api_key=settings.groq_api_key,
-            base_url="https://api.groq.com/openai/v1",
-            model="llama-3.3-70b-versatile",
-            temperature=0.1,  # deterministik
-            max_tokens=120,   # tek cumle yeterli
+            api_key=settings.openrouter_api_key,
+            base_url="https://openrouter.ai/api/v1",
+            model="meta-llama/llama-3.3-70b-instruct",
+            temperature=0.1,
+            max_tokens=120,
+            default_headers={
+                "HTTP-Referer": "https://github.com/paytar-ai",
+                "X-Title": "PaytarAI",
+            },
         )
     return _sb_llm
 

@@ -80,3 +80,14 @@ class AgentState(TypedDict):
     # ÖNEMLI: Bu alan AgentState'te tanımlanmazsa LangGraph state'i schema ile
     # filtreler ve node'lar arası kaybeder → Multi-HyDE + enriched retrieval ölü kalır.
     query_analysis: dict
+
+    # Sentence grounding filter sonucu — "passed" | "filtered" | "safe_fallback"
+    # sentence_grounding_node yazar; critic ve confidence gozlemek istese okuyabilir.
+    grounding_action: str
+
+    # Detayli debug trace — her node calistiginda input + output + raw LLM
+    # cevaplarini buraya yazar. Standart `audit_log`'tan AYRI: audit kisa+kararsal,
+    # debug_trace tam icerik (chunk metinleri, prompt'lar, raw JSON).
+    # /api/v1/chat?debug=true ile UI'a dondurulur.
+    # Format: [{node, input, output, latency_ms}, ...]
+    debug_trace: list[dict]

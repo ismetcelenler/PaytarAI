@@ -9,8 +9,11 @@ bunu okur, kendi LLM cagrilarini yapmaz.
 Out-of-scope ise pipeline durdurulur.
 """
 
+import time
+
 from app.rag.query_analyzer import analyze_query
 from app.graph.audit import audit_log
+from app.graph.debug_trace import trace_node, trim_text
 
 
 OUT_OF_SCOPE_TEMPLATE = (
@@ -24,21 +27,13 @@ OUT_OF_SCOPE_TEMPLATE = (
 def scope_check_node(state: dict) -> dict:
     """
     Tek Groq cagrisi: scope + Multi-HyDE + keywords. Sonucu state'e koy.
-
-    Out-of-scope ise:
-      - retrieved_docs bos
-      - final_response = OUT_OF_SCOPE_TEMPLATE
-      - response_status = "out_of_scope"
-    In-scope ise:
-      - state["query_analysis"] = {is_in_scope, hyde_variants, enriched_keywords, ...}
-      - downstream (retriever) bunu kullanir
     """
+    t0 = time.perf_counter()
     messages = state.get("messages", [])
     if not messages:
         state["response_status"] = "error"
         return state
 
-    # Son kullanici mesajini al
     last_user_msg = ""
     for msg in reversed(messages):
         if isinstance(msg, dict) and msg.get("role") == "user":
@@ -54,6 +49,7 @@ def scope_check_node(state: dict) -> dict:
 
     analysis = analyze_query(last_user_msg)
     state["query_analysis"] = analysis
+    latency_ms = (time.perf_counter() - t0) * 1000
 
     if analysis["is_in_scope"]:
         audit_log(
@@ -65,9 +61,20 @@ def scope_check_node(state: dict) -> dict:
                 f"err={analysis.get('error')}"
             ),
         )
+        trace_node(
+            state, "scope_check",
+            input={"user_message": last_user_msg},
+            output={
+                "decision": "in_scope",
+                "raw_analyzer": trim_text(analysis.get("raw_text", ""), 1500),
+                "hyde_variants": analysis.get("hyde_variants", []),
+                "enriched_keywords": analysis.get("enriched_keywords", ""),
+                "error": analysis.get("error"),
+            },
+            latency_ms=latency_ms,
+        )
         return state
 
-    # Out-of-scope: sabit template don, downstream'i atla
     state["final_response"] = OUT_OF_SCOPE_TEMPLATE
     state["draft_response"] = OUT_OF_SCOPE_TEMPLATE
     state["response_status"] = "out_of_scope"
@@ -81,6 +88,16 @@ def scope_check_node(state: dict) -> dict:
         state,
         "scope_check_out_of_scope",
         reason=f"analyzer: {analysis.get('raw_text', '')[:80]}",
+    )
+    trace_node(
+        state, "scope_check",
+        input={"user_message": last_user_msg},
+        output={
+            "decision": "out_of_scope",
+            "raw_analyzer": trim_text(analysis.get("raw_text", ""), 1500),
+            "fallback_response": OUT_OF_SCOPE_TEMPLATE,
+        },
+        latency_ms=latency_ms,
     )
 
     return state

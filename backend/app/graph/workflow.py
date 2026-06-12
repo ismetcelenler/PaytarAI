@@ -13,22 +13,9 @@ from app.graph.nodes import (
     compress_node,
     retriever_node,
     generator_node,
-    critic_node,
+    sentence_grounding_node,
     confidence_node,
 )
-
-
-def should_retry(state: dict) -> str:
-    """
-    Critic sonucuna gore yonlendirme.
-    - rejected -> generator'a geri don
-    - accepted / accepted_after_max_retries -> confidence'a git
-    """
-    status = state.get("response_status", "")
-
-    if status == "rejected":
-        return "generator"
-    return "confidence"
 
 
 def after_scope_check(state: dict) -> str:
@@ -65,12 +52,24 @@ def build_graph() -> StateGraph:
     """
     LangGraph workflow'u olusturur ve derler.
 
-    Akis:
-    scope_check -> (in_scope) -> compress -> retriever -> generator -> critic
-                                                                          |
-                                                            rejected -> generator (max 2 kez)
-                                                            accepted -> confidence -> END
+    Akis (v4 — critic kaldirildi):
+    scope_check -> (in_scope) -> compress -> retriever -> generator
+                                                              |
+                                                              v
+                                                    sentence_grounding (LettuceDetect)
+                                                              |
+                                                              v
+                                                         confidence -> END
                 -> (out_of_scope) -> confidence -> END
+
+    Notlar:
+      - Critic v4'te tamamen kaldirildi. Onceki rolleri:
+        * `grounded`        -> sentence_grounding (LettuceDetect) yapiyor
+        * `answer_relevant` -> retrieval rerank skoru zaten gosteriyor
+        * `disclaimer`      -> generator prompt'unda hard rule
+        * `emergency`       -> generator prompt'unda hard rule
+        * `lay_language`    -> generator prompt'unda hard rule (producer)
+      - Retry dongusu yok artik. Generator tek seferde uretir, grounding temizler.
     """
     graph = StateGraph(AgentState)
 
@@ -79,7 +78,7 @@ def build_graph() -> StateGraph:
     graph.add_node("compress", compress_node)
     graph.add_node("retriever", retriever_node)
     graph.add_node("generator", generator_node)
-    graph.add_node("critic", critic_node)
+    graph.add_node("sentence_grounding", sentence_grounding_node)
     graph.add_node("confidence", confidence_node)
 
     # Entry point: scope_check
@@ -108,17 +107,11 @@ def build_graph() -> StateGraph:
             "confidence": "confidence",
         },
     )
-    graph.add_edge("generator", "critic")
 
-    # Conditional edge: critic -> generator (retry) veya confidence (accept)
-    graph.add_conditional_edges(
-        "critic",
-        should_retry,
-        {
-            "generator": "generator",
-            "confidence": "confidence",
-        },
-    )
+    # Generator -> Sentence Grounding (LettuceDetect) -> Confidence
+    # Critic kaldirildi: LettuceDetect token-level grounding'i tek basina yapiyor.
+    graph.add_edge("generator", "sentence_grounding")
+    graph.add_edge("sentence_grounding", "confidence")
 
     graph.add_edge("confidence", END)
 
