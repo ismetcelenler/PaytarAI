@@ -131,6 +131,10 @@ def _get_judge_llm() -> ChatOpenAI:
             # JSON-only output zorla: OpenRouter response_format destegi vardir,
             # cikti markdown sarmali / aciklama gelmez.
             model_kwargs={"response_format": {"type": "json_object"}},
+            # PROVIDER PIN: Groq (tum llama-3.3-70b cagrilari ayni provider'da).
+            extra_body={
+                "provider": {"order": ["groq"], "allow_fallbacks": False}
+            },
             default_headers={
                 "HTTP-Referer": "https://github.com/paytar-ai",
                 "X-Title": "PaytarAI",
@@ -945,6 +949,42 @@ def claim_attribution_node(state: dict) -> dict:
         "verifier_latency_ms": round(verifier_ms, 1),
     }
     latency_ms = (time.perf_counter() - t0) * 1000
+
+    # ── RESCUE: retrieval cok guclu ama judge HER claim'i dropladi ──
+    # rerank_top yuksekse (>=0.85) kaynaklar konuyla ACIKCA ilgili demektir.
+    # Judge'in hicbir claim'i baglayamamasi bu durumda genelde judge varyansidir
+    # (temp=0 olsa da MoE model run-to-run oynuyor), gercek bilgi yoklugu degil.
+    # "Elimde bilgi yok" demek yerine generator taslagini oldugu gibi gecir.
+    # Tradeoff: inline [Kaynak N] atifi olmaz (baglanan claim yok), ama alttaki
+    # kaynak paneli yine gosterilir. Yalnizca TUM claim'ler droplandiginda devreye
+    # girer — kismi drop'ta eski safe_fallback davranisi korunur.
+    RESCUE_RERANK_THRESHOLD = 0.85
+    rerank_top = float(state.get("rerank_top_score", 0.0))
+    all_claims_dropped = n_claims >= 1 and not any(
+        a["type"] == "claim" and a["supported"] for a in annotated
+    )
+    if all_claims_dropped and rerank_top >= RESCUE_RERANK_THRESHOLD:
+        state["draft_response"] = draft  # generator taslagi (atifsiz) korunur
+        state["grounding_action"] = "passthrough_strong_retrieval"
+        audit_log(state, "claim_attr_passthrough_strong_retrieval",
+                  reason=f"rerank_top={rerank_top:.2f} >= {RESCUE_RERANK_THRESHOLD}, "
+                         f"judge tum {n_claims} claim'i dropladi -> taslak gecirildi")
+        print(
+            f"[claim_attr] RESCUE: rerank_top={rerank_top:.2f} yuksek, judge tum "
+            f"{n_claims} claim'i dropladi -> passthrough (atifsiz)"
+        )
+        trace_node(state, "claim_attribution",
+                   input={"draft_in": trim_text(draft),
+                          "prompt": trim_text(prompt, 3000),
+                          "n_sources": min(len(docs), 5)},
+                   output={"sentences": annotated, "stats": stats,
+                           "raw_response": trim_text(raw_response, 2000),
+                           "action": "passthrough_strong_retrieval",
+                           "rerank_top": round(rerank_top, 4),
+                           "draft_out": draft,
+                           "judge": "meta-llama/llama-3.3-70b-instruct"},
+                   latency_ms=latency_ms)
+        return state
 
     # ── Cogu claim drop -> safe fallback ──────────────────────
     if n_claims >= 3 and drop_ratio > 0.6:

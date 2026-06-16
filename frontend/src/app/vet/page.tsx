@@ -13,16 +13,16 @@ import {
 } from "@/components/paytar/message";
 
 const SUGGESTED = [
-  { tag: "Buzağı ishali", q: "Yenidoğan buzağıda ishal: etiyoloji ve sıvı-elektrolit tedavisi" },
-  { tag: "Süt humması", q: "Süt ineğinde doğum sonrası hipokalsemi (süt humması) tedavisi nedir?" },
-  { tag: "Mastitis", q: "Holstein'da klinik mastitisin ayırıcı tanısı nasıl yapılır?" },
-  { tag: "Ketozis", q: "Subklinik ketozisin klinik bulguları ve tanı kriterleri" },
-  { tag: "Abomasum", q: "Sol abomasum deplasmanı (LDA) tanısı ve sağaltımı" },
-  { tag: "Metritis", q: "Doğum sonrası akut metritiste tedavi yaklaşımı" },
-  { tag: "Koksidiyoz", q: "Buzağılarda koksidiyozun belirtileri ve tedavisi" },
-  { tag: "Listeriozis", q: "Sığırda listeriozisin nörolojik bulguları nelerdir?" },
-  { tag: "Hardware", q: "Travmatik retikuloperitonit (hardware disease) tanısı" },
-  { tag: "Kolostrum", q: "Buzağıda pasif bağışıklık için kolostrum yönetimi" },
+  { tag: "Buzağı bakımı", q: "Yeni doğan buzağıya neler yapılmalı?" },
+  { tag: "Buzağı ishali", q: "Buzağılarda ishal nasıl tedavi edilmeli?" },
+  { tag: "Kolostrum", q: "Buzağıya ağız sütü (kolostrum) ne zaman ve ne kadar verilmeli?" },
+  { tag: "Süt humması", q: "Doğum yapan inek ayağa kalkamıyorsa ne yapılmalı?" },
+  { tag: "Mastitis", q: "Memesi şişen ve sütü bozulan inekte nasıl ilerlenmeli?" },
+  { tag: "Ketozis", q: "Doğumdan sonra yem yemeyen, halsiz inekte ne yapılmalı?" },
+  { tag: "Koksidiyoz", q: "Buzağılarda kanlı ishal görülünce ne yapılmalı?" },
+  { tag: "Metritis", q: "Doğum sonrası kötü kokulu akıntısı olan inekte ne yapılmalı?" },
+  { tag: "Topallık", q: "Topallayan inekte nasıl bir yaklaşım izlenmeli?" },
+  { tag: "Verim düşüşü", q: "Sürüde süt verimi düşünce olası nedenler neler?" },
 ];
 
 const HISTORY = [

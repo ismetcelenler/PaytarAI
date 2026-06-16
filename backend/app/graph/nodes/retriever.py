@@ -242,16 +242,27 @@ def retriever_node(state: dict) -> dict:
     #       (0.60) cosine'a kalibre. Reranker skorunu buraya yazarsan gate bozulur.
     #   rerank_top_score = reranker output (audit/log icin)
     if final_docs:
-        rerank_top = float(final_docs[0].get("rerank_score") or 0.0)
+        # GATE SKORU = HER IKI DIL HAVUZUNDAKI en yuksek rerank skoru.
+        # ESKI HATA: final_docs[0] (= tr_top[0]) kullaniliyordu. final_docs =
+        # tr_top + en_top oldugu icin bu HER ZAMAN TR havuzunun tepesiydi. Cevap
+        # Ingilizce kaynakta (Rebhun's) olan sorgularda TR chunk'lar zayif (0.16)
+        # kalip EN chunk'lar guclu (0.70) olunca, clarification gate sadece TR'ye
+        # bakip yanlislikla "biraz daha bilgi gerek" yoluna sapiyordu. Max iki
+        # havuzu da hesaba katar. NOT: final_docs SIRASI degismez (tr_top+en_top,
+        # LAURA bias mitigation) — bu yalnizca gate karar skoru.
+        rerank_scores = sorted(
+            (float(d.get("rerank_score") or 0.0) for d in final_docs),
+            reverse=True,
+        )
+        rerank_top = rerank_scores[0]
 
         # Confidence gate: ORIJINAL dense cosine skoru (RRF degil)
         # RRF skoru 0.01-0.03 araliginda — gate threshold (0.60 cosine) ile uyumsuz
         state["retrieval_similarity_score"] = dense_top_cosine
         state["rerank_top_score"] = rerank_top  # yeni alan, audit/log icin
 
-        if len(final_docs) >= 2:
-            rerank_second = float(final_docs[1].get("rerank_score") or 0.0)
-            state["source_agreement"] = abs(rerank_top - rerank_second) < 0.15
+        if len(rerank_scores) >= 2:
+            state["source_agreement"] = abs(rerank_scores[0] - rerank_scores[1]) < 0.15
         else:
             state["source_agreement"] = False
     else:

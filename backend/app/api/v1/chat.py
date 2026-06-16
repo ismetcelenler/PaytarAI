@@ -194,18 +194,13 @@ def _build_response_payload(result: dict, thread_id: str, debug: bool) -> dict:
             return round(float(rerank), 4)
         return round(float(doc.get("score", 0.0)), 4)
 
-    sources = []
-    snippet_len = 800 if debug else 200
-    for doc in result.get("retrieved_docs", [])[:5]:
-        sources.append({
-            "title": doc["metadata"].get("source_title", ""),
-            "score": _display_score(doc),
-            "dense_score": round(float(doc.get("score", 0.0)), 4),
-            "snippet": doc["text"][:snippet_len],
-        })
+    # Generator'a giden tum chunk'lar (maks 6: 3 TR + 3 EN). chunks dizisi TAM
+    # tutulur — [Kaynak N] modal'i chunk_id ile bunlara erisir (atif butunlugu
+    # korunur, filtreden etkilenmez).
+    docs6 = result.get("retrieved_docs", [])[:6]
 
     chunks = []
-    for doc in result.get("retrieved_docs", [])[:5]:
+    for doc in docs6:
         chunks.append({
             "title": doc["metadata"].get("source_title", ""),
             "language": doc["metadata"].get("language"),
@@ -214,6 +209,10 @@ def _build_response_payload(result: dict, thread_id: str, debug: bool) -> dict:
             "text": doc["text"],
         })
 
+    # Cumle-duzeyi atif sonuclari (claim_attribution debug trace'inden). Panel
+    # filtresinden ONCE okunur: fiilen atif yapilan chunk'lar rerank dusuk olsa
+    # bile panelde gosterilmeli — boylece her [Kaynak N] panelde karsilik bulur
+    # ve atifin dayanagi (chunk) kaybolmaz.
     sentence_citations: list[dict] = []
     for entry in result.get("debug_trace", []):
         if entry.get("node") == "claim_attribution":
@@ -221,6 +220,40 @@ def _build_response_payload(result: dict, thread_id: str, debug: bool) -> dict:
             if not out.get("skipped") and isinstance(out.get("sentences"), list):
                 sentence_citations = out["sentences"]
             break
+    cited_ids = {
+        c["chunk_id"] for c in sentence_citations
+        if isinstance(c, dict) and isinstance(c.get("chunk_id"), int)
+    }
+
+    # KAYNAK PANELI: rerank >= 0.50 olanlar VEYA fiilen atif yapilmis chunk'lar
+    # (maks 6). Zayif eslesen ve atif da yapilmamis chunk'lar (ozellikle cevap
+    # Ingilizce kaynaktayken dusuk kalan TR chunk'lar) panele girmez. Her kaynak
+    # ORIJINAL 1-tabanli numarasini tasir (chunk_id); boylece [Kaynak N]
+    # etiketleriyle numara tutarli kalir ve tiklayinca dogru chunk acilir.
+    SOURCE_DISPLAY_THRESHOLD = 0.50
+    snippet_len = 800 if debug else 200
+    sources = []
+    for i, doc in enumerate(docs6, 1):
+        if _display_score(doc) < SOURCE_DISPLAY_THRESHOLD and i not in cited_ids:
+            continue
+        sources.append({
+            "title": doc["metadata"].get("source_title", ""),
+            "chunk_id": i,
+            "score": _display_score(doc),
+            "dense_score": round(float(doc.get("score", 0.0)), 4),
+            "snippet": doc["text"][:snippet_len],
+        })
+    # Hicbiri esigi gecemezse (nadir — gate normalde en az birini garanti eder)
+    # en guclu kaynagi yine de goster ki panel bos kalmasin.
+    if not sources and docs6:
+        top = docs6[0]
+        sources.append({
+            "title": top["metadata"].get("source_title", ""),
+            "chunk_id": 1,
+            "score": _display_score(top),
+            "dense_score": round(float(top.get("score", 0.0)), 4),
+            "snippet": top["text"][:snippet_len],
+        })
 
     debug_trace = result.get("debug_trace", []) if debug else []
     response_text = (

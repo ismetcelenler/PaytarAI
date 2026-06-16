@@ -103,18 +103,21 @@ export function AssistantBubble({
           <div className="font-mono text-[10px] text-paytar-muted tracking-widest uppercase mb-2">
             Kaynaklar · {message.sources.length}
           </div>
-          {message.sources.map((src, i) => (
-            <SourceRow
-              key={i}
-              index={i + 1}
-              source={src}
-              onClick={
-                message.chunks && message.chunks[i]
-                  ? () => openChunk(i + 1)
-                  : undefined
-              }
-            />
-          ))}
+          {message.sources.map((src, i) => {
+            // Panel rerank<0.50 kaynaklari gizledigi icin dizi index'i artik
+            // chunk numarasiyla ayni olmayabilir. src.chunk_id ORIJINAL numara —
+            // hem gosterilen numara hem modal acilisi bununla yapilir.
+            const cid = src.chunk_id ?? i + 1;
+            const hasChunk = !!(message.chunks && message.chunks[cid - 1]);
+            return (
+              <SourceRow
+                key={i}
+                index={cid}
+                source={src}
+                onClick={hasChunk ? () => openChunk(cid) : undefined}
+              />
+            );
+          })}
         </div>
       )}
 

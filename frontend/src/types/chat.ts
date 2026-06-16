@@ -37,6 +37,12 @@ export interface Source {
   title: string;
   score: number;
   snippet: string;
+  /** Orijinal 1-tabanli kaynak numarasi (retrieved_docs index). Kaynak paneli
+   *  rerank < 0.50 olanlari gizler ama numara [Kaynak N] etiketleriyle tutarli
+   *  kalsin ve tiklayinca dogru chunk acilsin diye tasinir. */
+  chunk_id?: number;
+  /** Dense cosine skoru (panelde rerank gosteriliyor; bu ek bilgi). */
+  dense_score?: number;
 }
 
 /** Backend chunks alani — claim_attribution citation modal'inin gosterdigi tam metin. */

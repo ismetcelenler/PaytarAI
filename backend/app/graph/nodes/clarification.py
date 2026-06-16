@@ -58,6 +58,10 @@ def _get_clarify_llm() -> ChatOpenAI:
             temperature=0.2,
             max_tokens=600,
             model_kwargs={"response_format": {"type": "json_object"}},
+            # PROVIDER PIN: Groq (tum llama-3.3-70b cagrilari ayni provider'da).
+            extra_body={
+                "provider": {"order": ["groq"], "allow_fallbacks": False}
+            },
             default_headers={
                 "HTTP-Referer": "https://github.com/paytar-ai",
                 "X-Title": "PaytarAI",

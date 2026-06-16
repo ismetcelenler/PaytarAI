@@ -133,6 +133,11 @@ def _get_analyzer_llm() -> ChatOpenAI:
             temperature=0,
             # 1200: 3 HyDE + KEYWORDS + EN_QUERY + TR_RERANK + EN_RERANK icin yeterli.
             max_tokens=1200,
+            # PROVIDER PIN: Groq. Tum llama-3.3-70b cagrilari ayni provider'da
+            # kalsin (latency/davranis tutarliligi). allow_fallbacks=False.
+            extra_body={
+                "provider": {"order": ["groq"], "allow_fallbacks": False}
+            },
             default_headers={
                 "HTTP-Referer": "https://github.com/paytar-ai",
                 "X-Title": "PaytarAI",
