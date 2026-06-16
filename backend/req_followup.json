@@ -1,0 +1,11 @@
+{
+  "user_role": "producer",
+  "response_length": "medium",
+  "debug": true,
+  "message": "5 yaşında, dün başladı, dışkıda kan var ve halsiz, ateşi 39.8",
+  "messages": [
+    {"role": "user", "content": "ineğim saman yedi ve hastalandı neden olabilir"},
+    {"role": "assistant", "content": "İneklerin hastalanmasına neden olabilecek birçok faktör var, bu nedenle daha fazla bilgi toplamak gerekiyor.\n\n**Olası nedenler:**\n- Rumen Asidozu\n- Mikotoksin Zehirlenmesi\n- Listeriosis\n- Kursun Zehirlenmesi\n\n**Daha doğru cevap için söyler misin:**\n1. İneğin yaşını ve kaç gün önce saman yediğini biliyor musunuz?\n2. İneğin dışkısı normal mi, yoksa renk veya kıvamda bir değişiklik var mı?\n3. İneğin ateşi var mı veya son günlerde davranışında bir değişiklik oldu mu?", "kind": "clarification"},
+    {"role": "user", "content": "5 yaşında, dün başladı, dışkıda kan var ve halsiz, ateşi 39.8"}
+  ]
+}

@@ -121,6 +121,31 @@ SENTENCE_HALLUC_THRESHOLD = 0.30
 # Specific/generic ayrimi yapmadan global oran — generic cumleler de sayilir.
 ANSWER_HALLUC_THRESHOLD = 0.40
 
+# Noise filter — LettuceDetect bazen Turkce ek/alt-token'lari yanlislikla
+# halusinasyon olarak isaretliyor ("ım", "kl", '"', "u" gibi). Bu degerler
+# altindaki span'lar atilir.
+MIN_SPAN_CHARS = 4
+MIN_SPAN_CONFIDENCE = 0.60
+
+
+def _filter_noise_spans(spans: list[dict]) -> list[dict]:
+    """LettuceDetect sub-token gurultusunu sil:
+      - 4 karakterden kisa metin (TR ekleri, parantezler vs)
+      - %60 alti confidence (model tereddutlu)
+      - Sadece noktalama/bosluk olan span'lar
+    """
+    out = []
+    for sp in spans:
+        text = (sp.get("text") or "").strip()
+        if len(text) < MIN_SPAN_CHARS:
+            continue
+        if float(sp.get("confidence", 0.0)) < MIN_SPAN_CONFIDENCE:
+            continue
+        if re.fullmatch(r"[\W_]+", text):
+            continue
+        out.append(sp)
+    return out
+
 
 def _annotate_sentences(
     answer: str,
@@ -272,14 +297,19 @@ def sentence_grounding_node(state: dict) -> dict:
     # ─────────────────────────────────────────────────────────
     try:
         t_inf = time.perf_counter()
-        spans = detector.predict(
+        raw_spans = detector.predict(
             context=[context_block],
             question=user_query or "Soru bilinmiyor",
             answer=draft,
             output_format="spans",
         ) or []
         inf_ms = (time.perf_counter() - t_inf) * 1000
-        print(f"[lettucedetect] inference: {inf_ms:.0f}ms, spans: {len(spans)}")
+        # Noise filter: sub-token gurultusunu temizle
+        spans = _filter_noise_spans(raw_spans)
+        print(
+            f"[lettucedetect] inference: {inf_ms:.0f}ms, "
+            f"raw spans: {len(raw_spans)}, after noise filter: {len(spans)}"
+        )
     except Exception as e:
         err_msg = str(e)
         print(f"[lettucedetect] hata: {err_msg[:200]} — atlaniyor")

@@ -37,6 +37,10 @@ class AgentState(TypedDict):
     # Girdi kaynağı — UI'dan inject edilir
     input_source: Literal["text", "voice"]
 
+    # Yanıt uzunluğu tercihi — UI'da kullanıcı toggle ile seçer.
+    # Generator prompt'una "RESPONSE LENGTH" talimatı olarak inject edilir.
+    response_length: Literal["short", "medium", "long"]
+
     # Kanıt güven skoru
     evidence_confidence: Literal["high", "medium", "low", "insufficient"]
 
@@ -91,3 +95,17 @@ class AgentState(TypedDict):
     # /api/v1/chat?debug=true ile UI'a dondurulur.
     # Format: [{node, input, output, latency_ms}, ...]
     debug_trace: list[dict]
+
+    # Yanit uzunluğu tercihi — UI toggle'iyla gelir.
+    response_length: Literal["short", "medium", "long"]
+
+    # Clarification döngüsü:
+    # rerank_top < 0.50 olduğunda backend kullanıcıya hedefli takip sorusu sorar.
+    # Bu sayaç kaç kez clarification gösterdiğimizi tutar (max 2). Asilirsa
+    # fallback template doner.
+    clarification_attempts: int
+
+    # clarification_node'un urettigi yapilandirilmis payload:
+    #   {"intro": str, "differentials": [str], "follow_up_questions": [str]}
+    # Frontend bunu ozel UI'da render eder (sari accent badge, listeler).
+    clarification_payload: dict

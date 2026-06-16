@@ -58,7 +58,9 @@ def _get_sb_llm() -> ChatOpenAI:
             api_key=settings.openrouter_api_key,
             base_url="https://openrouter.ai/api/v1",
             model="meta-llama/llama-3.3-70b-instruct",
-            temperature=0.1,
+            # TEMP=0: deterministik step-back. Eski 0.1'de aynı sorguda her run
+            # biraz farkli geri-adim cumlesi → farkli embedding → dense skor varyansi.
+            temperature=0,
             max_tokens=120,
             default_headers={
                 "HTTP-Referer": "https://github.com/paytar-ai",

@@ -7,22 +7,39 @@
  *   - scope_check: analyzer ham cikti + HyDE + keywords
  *   - retriever: her kanalin top chunk'lari + reranked top-3 (full text)
  *   - generator: system prompt + context msg + raw response
- *   - sentence_grounding: her cumlenin chunk-id eslemesi (supported/dropped)
- *   - critic: judge prompt + raw JSON + decision
+ *   - claim_attribution: her cumlenin chunk-id eslemesi (claim/filler + drop)
+ *   - confidence: skor + threshold
+ *
+ * v5 (Faz C): sentence_grounding (LettuceDetect) yerine claim_attribution.
+ * Final response icinde [Kaynak N] etiketleri tiklanabilir, modal'da tam chunk acilir.
  */
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Loader2, Send } from "lucide-react";
-import { sendChatDebug } from "@/lib/paytar";
+import { ArrowLeft, HelpCircle, Loader2, RotateCcw, Send, User, X } from "lucide-react";
+import { sendChatStream } from "@/lib/paytar";
+import { findEvidenceRange } from "@/lib/highlight";
+import { PipelineProgress, type PipelineStepEvent } from "@/components/paytar/pipeline-progress";
 import type {
   ChatResponse,
   TraceEntry,
   UserRole,
-  GroundedSentence,
-  HallucinationSpan,
   ChunkSnapshot,
+  ChunkFull,
+  SentenceCitation,
+  ResponseLength,
+  BackendMessage,
 } from "@/types/chat";
+
+/** Bir tur = (kullanici sorusu, backend yaniti, pipeline metrikleri). Test panelinde
+ *  multi-turn destegi icin tutuyoruz; her tur kendi TraceView'i ile gosterilir. */
+interface TestTurn {
+  id: string;
+  userMessage: string;
+  resp: ChatResponse;
+  elapsedSec: number;
+  steps: PipelineStepEvent[];
+}
 
 const EXAMPLE_QUERIES: Array<{ label: string; q: string; role: UserRole }> = [
   { label: "VET — buzağı ishali ayırıcı", role: "veterinarian", q: "Yenidoğan buzağılarda ishal yapan başlıca etkenler nelerdir, ayırt edici özellikleri nedir?" },
@@ -32,31 +49,145 @@ const EXAMPLE_QUERIES: Array<{ label: string; q: string; role: UserRole }> = [
   { label: "Acil — timpani", role: "producer", q: "ineğim aniden çok şişti karın bölgesi balon gibi ne yapayım acil mi" },
 ];
 
+const LENGTH_OPTIONS: Array<{ value: ResponseLength; label: string }> = [
+  { value: "short", label: "Kısa" },
+  { value: "medium", label: "Orta" },
+  { value: "long", label: "Uzun" },
+];
+
 export default function TestPanelPage() {
   const [role, setRole] = useState<UserRole>("veterinarian");
+  const [length, setLength] = useState<ResponseLength>("medium");
   const [question, setQuestion] = useState("");
-  const [resp, setResp] = useState<ChatResponse | null>(null);
+  // Multi-turn: her gönderim turlar listesine eklenir, history backend'e iletilir.
+  const [turns, setTurns] = useState<TestTurn[]>([]);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [elapsed, setElapsed] = useState(0);
+  const [openChunkId, setOpenChunkId] = useState<number | null>(null);
+  const [openSentenceText, setOpenSentenceText] = useState<string | null>(null);
+  const [openEvidence, setOpenEvidence] = useState<string | null>(null);
+  const [streamSteps, setStreamSteps] = useState<PipelineStepEvent[]>([]);
+  const [streamStartedAt, setStreamStartedAt] = useState<number | null>(null);
+
+  const [liveMs, setLiveMs] = useState(0);
+  useEffect(() => {
+    if (!streamStartedAt) {
+      setLiveMs(0);
+      return;
+    }
+    const t = setInterval(() => setLiveMs(Date.now() - streamStartedAt), 100);
+    return () => clearInterval(t);
+  }, [streamStartedAt]);
+
+  const lastTurn = turns.length > 0 ? turns[turns.length - 1] : null;
+  const inClarificationFlow =
+    lastTurn?.resp.response_status === "clarification_needed";
+
+  // History'yi backend formatina cevir — clarification turlarini "kind=clarification"
+  // olarak isaretle (backend clarification_attempts'i geri hesapliyor).
+  const buildHistory = (newUserMsg: string): BackendMessage[] => {
+    const msgs: BackendMessage[] = [];
+    for (const t of turns) {
+      msgs.push({ role: "user", content: t.userMessage });
+      const kind: BackendMessage["kind"] =
+        t.resp.response_status === "clarification_needed"
+          ? "clarification"
+          : t.resp.response_status === "clarification_exhausted" ||
+            t.resp.response_status === "insufficient_evidence" ||
+            t.resp.response_status === "out_of_scope" ||
+            t.resp.response_status === "fallback"
+          ? "fallback"
+          : "answer";
+      msgs.push({ role: "assistant", content: t.resp.response, kind });
+    }
+    msgs.push({ role: "user", content: newUserMsg });
+    return msgs;
+  };
 
   const submit = async () => {
-    if (!question.trim() || pending) return;
+    const trimmed = question.trim();
+    if (!trimmed || pending) return;
+
     setPending(true);
     setError(null);
-    setResp(null);
+    setStreamSteps([]);
+    setStreamStartedAt(Date.now());
     const t0 = performance.now();
     const tick = window.setInterval(() => setElapsed((performance.now() - t0) / 1000), 200);
+
+    const history = buildHistory(trimmed);
+
     try {
-      const data = await sendChatDebug({ message: question.trim(), user_role: role });
-      setResp(data);
-      setElapsed((performance.now() - t0) / 1000);
+      let result: ChatResponse | null = null;
+      const collectedSteps: PipelineStepEvent[] = [];
+      await sendChatStream(
+        {
+          message: trimmed,
+          user_role: role,
+          response_length: length,
+          messages: history,
+        },
+        (ev) => {
+          if (ev.type === "step") {
+            const step = {
+              node: ev.data.node,
+              ms_since_start: ev.data.ms_since_start,
+              step_index: ev.data.step_index,
+            };
+            collectedSteps.push(step);
+            setStreamSteps((prev) => [...prev, step]);
+          } else if (ev.type === "result") {
+            result = ev.data;
+          } else if (ev.type === "error") {
+            throw new Error(ev.data.detail);
+          }
+        },
+        { debug: true },
+      );
+      if (!result) throw new Error("Stream bitti ama result event'i gelmedi.");
+
+      const finalSec = (performance.now() - t0) / 1000;
+      setElapsed(finalSec);
+
+      // Yeni turu listeye ekle
+      setTurns((prev) => [
+        ...prev,
+        {
+          id: crypto.randomUUID(),
+          userMessage: trimmed,
+          resp: result as ChatResponse,
+          elapsedSec: finalSec,
+          steps: collectedSteps,
+        },
+      ]);
+      setQuestion("");
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Bilinmeyen hata");
     } finally {
       window.clearInterval(tick);
       setPending(false);
+      setStreamStartedAt(null);
     }
+  };
+
+  const resetSession = () => {
+    setTurns([]);
+    setQuestion("");
+    setError(null);
+    setStreamSteps([]);
+  };
+
+  const openChunk = (id: number, sentenceText?: string, evidence?: string) => {
+    setOpenChunkId(id);
+    setOpenSentenceText(sentenceText ?? null);
+    setOpenEvidence(evidence ?? null);
+  };
+
+  const closeChunk = () => {
+    setOpenChunkId(null);
+    setOpenSentenceText(null);
+    setOpenEvidence(null);
   };
 
   return (
@@ -72,9 +203,20 @@ export default function TestPanelPage() {
               <span className="ml-2 font-mono text-[11px] text-paytar-muted">/ DEBUG TEST PANEL</span>
             </h1>
             <p className="font-mono text-[10px] text-paytar-muted tracking-wider mt-0.5">
-              Tüm pipeline'ın input/output'larını gör · Sentence-chunk eşleşmeleri · Halüsinasyon teşhisi
+              v6 · multi-turn · clarification gate · tıklanabilir atıflar
             </p>
           </div>
+          {turns.length > 0 && (
+            <button
+              onClick={resetSession}
+              disabled={pending}
+              className="ml-auto flex items-center gap-1.5 font-mono text-[10px] tracking-wider uppercase text-paytar-muted hover:text-paytar-ink px-2 py-1 rounded hover:bg-paytar-surface2 transition-colors disabled:opacity-40"
+              title="Tüm turları sıfırla, yeni oturum başlat"
+            >
+              <RotateCcw className="w-3 h-3" />
+              Yeni oturum
+            </button>
+          )}
         </div>
       </header>
 
@@ -91,6 +233,26 @@ export default function TestPanelPage() {
               <option value="veterinarian">VET (veteriner)</option>
               <option value="producer">Üretici</option>
             </select>
+            <div className="inline-flex border border-paytar-line rounded-md overflow-hidden self-stretch">
+              {LENGTH_OPTIONS.map((opt) => {
+                const active = length === opt.value;
+                return (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => setLength(opt.value)}
+                    disabled={pending}
+                    className={`px-3 font-mono text-[10px] tracking-wider uppercase transition-colors ${
+                      active
+                        ? "bg-paytar-accent text-paytar-surface"
+                        : "bg-paytar-bg text-paytar-muted hover:text-paytar-ink hover:bg-paytar-surface2"
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                );
+              })}
+            </div>
             <textarea
               value={question}
               onChange={(e) => setQuestion(e.target.value)}
@@ -100,10 +262,16 @@ export default function TestPanelPage() {
                   submit();
                 }
               }}
-              placeholder="Soruyu yaz... (Ctrl+Enter: gönder)"
+              placeholder={
+                inClarificationFlow
+                  ? "Takip sorularını cevapla (örn: 5 yaşında, dün başladı, kanlı dışkı var)..."
+                  : "Soruyu yaz... (Ctrl+Enter: gönder)"
+              }
               rows={2}
               disabled={pending}
-              className="flex-1 px-3 py-2 rounded-md border border-paytar-line bg-paytar-bg text-sm resize-none"
+              className={`flex-1 px-3 py-2 rounded-md border bg-paytar-bg text-sm resize-none ${
+                inClarificationFlow ? "border-amber-400/60" : "border-paytar-line"
+              }`}
             />
             <button
               onClick={submit}
@@ -135,8 +303,110 @@ export default function TestPanelPage() {
           )}
         </section>
 
-        {resp && <TraceView resp={resp} totalElapsed={elapsed} />}
+        {/* Multi-turn — her turu sırasıyla bas */}
+        {turns.map((turn, i) => (
+          <TurnPanel
+            key={turn.id}
+            turn={turn}
+            turnIndex={i + 1}
+            totalTurns={turns.length}
+            openChunk={openChunk}
+          />
+        ))}
+
+        {pending && (
+          <section className="bg-paytar-surface border border-paytar-line rounded-2xl p-5">
+            <div className="font-mono text-[10px] tracking-wider uppercase text-paytar-muted mb-3">
+              Tur {turns.length + 1} işleniyor
+            </div>
+            <PipelineProgress
+              steps={streamSteps}
+              isStreaming={pending}
+              elapsedMs={liveMs}
+            />
+          </section>
+        )}
       </main>
+
+      {lastTurn && openChunkId !== null && (
+        <ChunkModal
+          chunk={lastTurn.resp.chunks?.[openChunkId - 1]}
+          chunkId={openChunkId}
+          highlightSentence={openSentenceText}
+          evidence={openEvidence}
+          onClose={closeChunk}
+        />
+      )}
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────── */
+/*  TURN PANEL — bir kullanici sorusu + cevap + pipeline trace  */
+/* ─────────────────────────────────────────────────────────── */
+
+function TurnPanel({
+  turn, turnIndex, totalTurns, openChunk,
+}: {
+  turn: TestTurn;
+  turnIndex: number;
+  totalTurns: number;
+  openChunk: OpenChunkFn;
+}) {
+  const status = turn.resp.response_status ?? "ok";
+  const isClarification = status === "clarification_needed";
+  const isExhausted = status === "clarification_exhausted";
+  const rerankTop = turn.resp.rerank_top_score ?? 0;
+  const denseTop = turn.resp.retrieval_similarity_score ?? 0;
+
+  const statusBadge = isClarification ? (
+    <span className="inline-flex items-center gap-1 font-mono text-[10px] uppercase tracking-wider px-2 py-0.5 rounded bg-amber-100 text-amber-800">
+      <HelpCircle className="w-3 h-3" />
+      Takip sorusu
+    </span>
+  ) : isExhausted ? (
+    <span className="font-mono text-[10px] uppercase tracking-wider px-2 py-0.5 rounded bg-destructive/15 text-destructive">
+      Tur limiti aşıldı
+    </span>
+  ) : status === "out_of_scope" ? (
+    <span className="font-mono text-[10px] uppercase tracking-wider px-2 py-0.5 rounded bg-paytar-surface2 text-paytar-muted">
+      Kapsam dışı
+    </span>
+  ) : (
+    <span className="font-mono text-[10px] uppercase tracking-wider px-2 py-0.5 rounded bg-paytar-accent-soft text-paytar-accent-ink">
+      Cevap
+    </span>
+  );
+
+  return (
+    <div className="space-y-3">
+      {/* Tur basligi + kullanici sorusu */}
+      <section className="bg-paytar-surface2 border border-paytar-line rounded-2xl p-4">
+        <div className="flex items-center gap-2 mb-2">
+          <span className="font-mono text-[10px] tracking-wider uppercase text-paytar-muted">
+            Tur {turnIndex} / {totalTurns}
+          </span>
+          {statusBadge}
+          <span className="font-mono text-[10px] text-paytar-muted ml-auto tabular-nums">
+            {turn.elapsedSec.toFixed(1)}s · dense={denseTop.toFixed(3)} · rerank={rerankTop.toFixed(3)}
+          </span>
+        </div>
+        <div className="flex items-start gap-3">
+          <div className="w-6 h-6 rounded-full bg-paytar-accent flex items-center justify-center text-paytar-surface flex-shrink-0">
+            <User className="w-3 h-3" />
+          </div>
+          <div className="flex-1 font-sans text-[14px] text-paytar-ink leading-relaxed">
+            {turn.userMessage}
+          </div>
+        </div>
+      </section>
+
+      {/* Bu turun pipeline trace'i */}
+      <TraceView
+        resp={turn.resp}
+        totalElapsed={turn.elapsedSec}
+        openChunk={openChunk}
+      />
     </div>
   );
 }
@@ -145,15 +415,19 @@ export default function TestPanelPage() {
 /*  TRACE VIEW — root komponent                                  */
 /* ─────────────────────────────────────────────────────────── */
 
-function TraceView({ resp, totalElapsed }: { resp: ChatResponse; totalElapsed: number }) {
+type OpenChunkFn = (id: number, sentenceText?: string, evidence?: string) => void;
+
+function TraceView({
+  resp, totalElapsed, openChunk,
+}: { resp: ChatResponse; totalElapsed: number; openChunk: OpenChunkFn }) {
   const trace = resp.debug_trace ?? [];
   return (
     <>
       <Timeline trace={trace} totalElapsed={totalElapsed} resp={resp} />
       {trace.map((entry, i) => (
-        <NodeSection key={i} entry={entry} resp={resp} />
+        <NodeSection key={i} entry={entry} resp={resp} openChunk={openChunk} />
       ))}
-      <FinalResponse resp={resp} />
+      <FinalResponse resp={resp} openChunk={openChunk} />
     </>
   );
 }
@@ -206,11 +480,34 @@ function nodeSummary(entry: TraceEntry): string {
     }
     case "generator":
       return `${out.char_count ?? 0}ch · ${out.model ?? ""}`;
+    case "claim_attribution": {
+      if (out.skipped) return `SKIP · ${out.reason ?? ""}`;
+      const stats = out.stats as {
+        total?: number; claims?: number; filler?: number; kept?: number;
+        dropped?: number; drop_ratio?: number;
+        verify_reassigned?: number; verify_dropped_evidence_missing?: number;
+        verifier_supported?: number; verifier_not_supported?: number;
+        verifier_errors?: number; verifier_latency_ms?: number;
+      } | undefined;
+      const action = out.action ?? "?";
+      const verifier =
+        (stats?.verifier_supported ?? 0) + (stats?.verifier_not_supported ?? 0) + (stats?.verifier_errors ?? 0) > 0
+          ? ` · verifier (Claude Opus 4.8, ${(stats?.verifier_latency_ms ?? 0).toFixed(0)}ms): supp=${stats?.verifier_supported ?? 0}, ¬supp=${stats?.verifier_not_supported ?? 0}, err=${stats?.verifier_errors ?? 0}`
+          : "";
+      return `${action} · ${stats?.total ?? "?"} cumle (claim=${stats?.claims ?? 0} filler=${stats?.filler ?? 0}) · dropped=${stats?.dropped ?? 0} (${((stats?.drop_ratio ?? 0) * 100).toFixed(0)}%)${verifier}`;
+    }
+    case "clarification": {
+      const action = out.action ?? "?";
+      const input = entry.input as Record<string, unknown>;
+      const attempt = input.attempt ?? "?";
+      const payload = out.payload as { differentials?: unknown[]; follow_up_questions?: unknown[] } | undefined;
+      return `${action} · attempt=${attempt} · differentials=${payload?.differentials?.length ?? 0} questions=${payload?.follow_up_questions?.length ?? 0}`;
+    }
     case "sentence_grounding": {
-      const stats = out.stats as { total?: number; specific?: number; generic?: number; dropped?: number; drop_ratio?: number } | undefined;
+      const stats = out.stats as { total?: number; dropped?: number } | undefined;
       const action = out.action ?? out.reason ?? "?";
       if (out.skipped) return `SKIP · ${out.reason ?? ""}`;
-      return `${action} · ${stats?.total ?? "?"} cumle (specific=${stats?.specific ?? 0} generic=${stats?.generic ?? 0}) · dropped=${stats?.dropped ?? 0} (${((stats?.drop_ratio ?? 0) * 100).toFixed(0)}%)`;
+      return `${action} · ${stats?.total ?? "?"} cumle · dropped=${stats?.dropped ?? 0}`;
     }
     case "critic":
       return `${out.decision} · judge_ok=${out.judge_ok ?? "?"}`;
@@ -223,8 +520,12 @@ function nodeSummary(entry: TraceEntry): string {
 /*  NODE SECTION — her node icin detayli card                   */
 /* ─────────────────────────────────────────────────────────── */
 
-function NodeSection({ entry, resp }: { entry: TraceEntry; resp: ChatResponse }) {
-  const [open, setOpen] = useState(entry.node === "sentence_grounding" || entry.node === "retriever");
+function NodeSection({
+  entry, resp, openChunk,
+}: { entry: TraceEntry; resp: ChatResponse; openChunk: OpenChunkFn }) {
+  const [open, setOpen] = useState(
+    entry.node === "claim_attribution" || entry.node === "retriever"
+  );
   return (
     <section className="bg-paytar-surface border border-paytar-line rounded-2xl overflow-hidden">
       <button
@@ -241,14 +542,12 @@ function NodeSection({ entry, resp }: { entry: TraceEntry; resp: ChatResponse })
       </button>
       {open && (
         <div className="border-t border-paytar-line p-5 space-y-4">
-          {entry.node === "sentence_grounding"
-            ? <GroundingDetail entry={entry} resp={resp} />
+          {entry.node === "claim_attribution"
+            ? <ClaimAttributionDetail entry={entry} resp={resp} openChunk={openChunk} />
             : entry.node === "retriever"
             ? <RetrieverDetail entry={entry} />
             : entry.node === "generator"
             ? <GeneratorDetail entry={entry} />
-            : entry.node === "critic"
-            ? <CriticDetail entry={entry} />
             : <ScopeCheckDetail entry={entry} />}
         </div>
       )}
@@ -259,11 +558,15 @@ function NodeSection({ entry, resp }: { entry: TraceEntry; resp: ChatResponse })
 function nodeLabel(n: TraceEntry["node"]) {
   return ({
     scope_check: "1 · Scope Check",
+    compress: "1b · Compress",
     retriever: "2 · Retriever (hybrid + rerank)",
     generator: "3 · Generator (Cerebras gpt-oss-120b)",
-    sentence_grounding: "4 · Sentence Grounding (Turk-LettuceDetect)",
-    critic: "5 · Critic (LLM-judge)",
-  } as const)[n];
+    claim_attribution: "4 · Claim Attribution (judge: Llama-3.3-70B + hardcode verify · verifier LLM: disabled)",
+    clarification: "3b · Clarification (Llama-3.3-70B takip sorusu)",
+    confidence: "5 · Confidence",
+    sentence_grounding: "4 · Sentence Grounding (legacy)",
+    critic: "5 · Critic (legacy)",
+  } as const)[n] ?? n;
 }
 
 /* ─────────────────────────────────────────────────────────── */
@@ -295,7 +598,7 @@ function ScopeCheckDetail({ entry }: { entry: TraceEntry }) {
 }
 
 /* ─────────────────────────────────────────────────────────── */
-/*  RETRIEVER detail — kanallar + reranked top-3                */
+/*  RETRIEVER detail — kanallar + reranked top-K                */
 /* ─────────────────────────────────────────────────────────── */
 
 function RetrieverDetail({ entry }: { entry: TraceEntry }) {
@@ -303,17 +606,42 @@ function RetrieverDetail({ entry }: { entry: TraceEntry }) {
   const out = entry.output as Record<string, unknown>;
   const channels = out.channels as Record<string, ChunkSnapshot[]>;
   const reranked = out.reranked_top_k as ChunkSnapshot[] ?? [];
+  const langPools = out.language_pools as {
+    tr_pool_size?: number;
+    en_pool_size?: number;
+    tr_reranked?: ChunkSnapshot[];
+    en_reranked?: ChunkSnapshot[];
+  } | undefined;
 
   return (
     <div className="space-y-4 font-sans text-sm">
-      <Field label="Original sorgu" value={inp.user_query as string} />
-      <Field label="Rerank sorgusu (orig + enriched)" value={inp.rerank_query as string} mono />
-      <Field label="Step-back sorgusu" value={inp.step_back_query as string} mono />
+      <Field label="Original sorgu (TR)" value={inp.user_query as string} />
+      <Field label="🌍 EN translated query (EN pool rerank için)" value={(inp.en_translated_query as string) || "(yok — analyzer üretmedi, fallback: orijinal TR sorgu)"} mono accent />
+      <Field label="Enriched keywords (BM25/dense kanalları için — rerank query'sinden çıkarıldı)" value={(inp.enriched_keywords as string) || "(yok)"} mono />
 
-      <div className="border border-paytar-line rounded-md p-3 bg-paytar-bg/50">
+      {langPools && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <PoolCard
+            title="🇹🇷 TR Pool"
+            poolSize={langPools.tr_pool_size ?? 0}
+            rerankQuery={(inp.tr_rerank_query as string) || ""}
+            reranked={langPools.tr_reranked ?? []}
+            accentTone="tr"
+          />
+          <PoolCard
+            title="🇬🇧 EN Pool"
+            poolSize={langPools.en_pool_size ?? 0}
+            rerankQuery={(inp.en_rerank_query as string) || ""}
+            reranked={langPools.en_reranked ?? []}
+            accentTone="en"
+          />
+        </div>
+      )}
+
+      <div className="border border-paytar-accent rounded-md p-3 bg-paytar-bg/50">
         <div className="flex items-center justify-between mb-2">
           <div className="font-mono text-[10px] tracking-wider uppercase text-paytar-accent-ink">
-            Reranked Top-3 (Generator'a giden)
+            Generator'a giden — TR top-K + EN top-K (concat, re-sort yok)
           </div>
           <CopyChunksButton chunks={reranked} />
         </div>
@@ -322,7 +650,13 @@ function RetrieverDetail({ entry }: { entry: TraceEntry }) {
             <div key={i} className="bg-paytar-surface border border-paytar-line rounded-md p-3">
               <div className="flex justify-between items-baseline gap-3 mb-1.5">
                 <div className="font-sans text-sm font-medium">
-                  <span className="font-mono text-paytar-accent-ink mr-2">[{i + 1}]</span>{c.title}
+                  <span className="font-mono text-paytar-accent-ink mr-2">[{i + 1}]</span>
+                  {c.language && (
+                    <span className={`font-mono text-[9px] mr-1.5 px-1 py-0.5 rounded ${
+                      c.language === "en" ? "bg-blue-100 text-blue-800" : "bg-amber-100 text-amber-800"
+                    }`}>{c.language.toUpperCase()}</span>
+                  )}
+                  {c.title}
                 </div>
                 <div className="font-mono text-[10px] text-paytar-muted whitespace-nowrap">
                   dense=<b className="text-paytar-ink">{c.dense_score?.toFixed(3)}</b> ·
@@ -354,6 +688,55 @@ function RetrieverDetail({ entry }: { entry: TraceEntry }) {
   );
 }
 
+function PoolCard({ title, poolSize, rerankQuery, reranked, accentTone }: {
+  title: string;
+  poolSize: number;
+  rerankQuery: string;
+  reranked: ChunkSnapshot[];
+  accentTone: "tr" | "en";
+}) {
+  const bg = accentTone === "tr" ? "bg-amber-50/30 border-amber-300/50" : "bg-blue-50/30 border-blue-300/50";
+  return (
+    <div className={`border rounded-md p-3 ${bg}`}>
+      <div className="flex items-center justify-between mb-2">
+        <div className="font-mono text-[11px] tracking-wider uppercase text-paytar-ink font-medium">
+          {title}
+        </div>
+        <span className="font-mono text-[10px] text-paytar-muted">
+          {poolSize} aday → top-{reranked.length}
+        </span>
+      </div>
+      <div className="text-[10px] font-mono text-paytar-muted mb-2 bg-paytar-bg/60 px-2 py-1 rounded border border-paytar-line/50 break-words">
+        rerank q: {rerankQuery || "(boş)"}
+      </div>
+      <div className="space-y-2">
+        {reranked.length === 0 ? (
+          <div className="text-[11px] font-mono text-paytar-muted italic px-2">
+            Bu dilde aday yok
+          </div>
+        ) : (
+          reranked.map((c, i) => (
+            <div key={i} className="bg-paytar-surface border border-paytar-line rounded p-2 text-[11px]">
+              <div className="flex justify-between items-baseline gap-2 mb-1">
+                <div className="font-sans font-medium truncate">
+                  <span className="font-mono text-paytar-accent-ink mr-1">[{i + 1}]</span>
+                  {c.title}
+                </div>
+                <div className="font-mono text-[9px] text-paytar-muted whitespace-nowrap">
+                  σ=<b className="text-paytar-ink">{c.rerank_sigmoid?.toFixed(3)}</b>
+                </div>
+              </div>
+              <div className="font-mono text-[9px] text-paytar-muted">
+                dense={c.dense_score?.toFixed(3)} · logit={c.rerank_logit?.toFixed(2)} · {c.text_len}ch
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
 function CopyChunksButton({ chunks }: { chunks: ChunkSnapshot[] }) {
   const [copied, setCopied] = useState(false);
 
@@ -370,7 +753,6 @@ function CopyChunksButton({ chunks }: { chunks: ChunkSnapshot[] }) {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
-      // fallback: textarea
       const ta = document.createElement("textarea");
       ta.value = payload;
       document.body.appendChild(ta);
@@ -386,9 +768,9 @@ function CopyChunksButton({ chunks }: { chunks: ChunkSnapshot[] }) {
     <button
       onClick={handleCopy}
       className="font-mono text-[10px] tracking-wider uppercase px-2.5 py-1 rounded border border-paytar-line text-paytar-accent-ink hover:bg-paytar-surface2 transition-colors flex items-center gap-1.5"
-      title="3 chunk'ı (başlık + skorlar + tam metin) panoya kopyala"
+      title="Chunkları (başlık + skorlar + tam metin) panoya kopyala"
     >
-      {copied ? "✓ kopyalandı" : "📋 3 chunk'ı kopyala"}
+      {copied ? "✓ kopyalandı" : "📋 chunkları kopyala"}
     </button>
   );
 }
@@ -443,7 +825,7 @@ function GeneratorDetail({ entry }: { entry: TraceEntry }) {
       <Collapsible title="Context message (sources + soru)" defaultOpen>
         <pre className="text-[11px] font-mono whitespace-pre-wrap bg-paytar-bg p-3 rounded-md border border-paytar-line max-h-[400px] overflow-y-auto">{String(inp.context_msg)}</pre>
       </Collapsible>
-      <Collapsible title="Raw LLM response (taslak — grounding'den önce)" defaultOpen>
+      <Collapsible title="Raw LLM response (taslak — claim_attribution'dan önce)" defaultOpen>
         <pre className="text-[12px] whitespace-pre-wrap bg-paytar-bg p-3 rounded-md border border-paytar-line max-h-[400px] overflow-y-auto">{String(out.raw_response)}</pre>
       </Collapsible>
       {Array.isArray(inp.rejection_reasons) && (inp.rejection_reasons as unknown[]).length > 0 && (
@@ -454,252 +836,349 @@ function GeneratorDetail({ entry }: { entry: TraceEntry }) {
 }
 
 /* ─────────────────────────────────────────────────────────── */
-/*  SENTENCE GROUNDING — özel cümle-chunk haritası              */
+/*  CLAIM ATTRIBUTION — per-cumle karar tablosu + chunk linki   */
 /* ─────────────────────────────────────────────────────────── */
 
-function GroundingDetail({ entry, resp }: { entry: TraceEntry; resp: ChatResponse }) {
+function ClaimAttributionDetail({
+  entry, openChunk,
+}: { entry: TraceEntry; resp: ChatResponse; openChunk: OpenChunkFn }) {
   const inp = entry.input as Record<string, unknown>;
   const out = entry.output as Record<string, unknown>;
+
   if (out.skipped) {
     return (
       <div className="font-sans text-sm text-paytar-muted">
-        Atlandı: <code className="text-paytar-ink">{String(out.reason ?? out.parse_error ?? out.error)}</code>
+        Atlandı: <code className="text-paytar-ink">{String(out.reason ?? out.error)}</code>
+        {Boolean(out.raw_response) && (
+          <Collapsible title="LLM raw response (yine de varsa)" defaultOpen={false}>
+            <pre className="text-[11px] font-mono whitespace-pre-wrap bg-paytar-bg p-3 rounded-md border border-paytar-line max-h-[300px] overflow-y-auto">{String(out.raw_response)}</pre>
+          </Collapsible>
+        )}
       </div>
     );
   }
-  const sentences = (out.sentences as GroundedSentence[]) ?? [];
+
+  const sentences = (out.sentences as SentenceCitation[]) ?? [];
   const stats = out.stats as {
-    total: number; specific: number; generic: number; supported: number; dropped: number; drop_ratio: number;
-    answer_halluc_chars?: number; answer_total_chars?: number; answer_halluc_ratio?: number;
-    raw_span_count?: number; inference_ms?: number;
+    total: number; claims: number; filler: number; kept: number; dropped: number;
+    drop_ratio: number; n_sources: number;
   };
   const action = out.action as string;
-  const verifier = out.verifier as string | undefined;
-  const rawSpans = (out.raw_spans as Array<{ start: number; end: number; text: string; confidence: number }>) ?? [];
+  const judge = out.judge as string | undefined;
 
   return (
     <div className="space-y-4 font-sans text-sm">
-      {verifier && (
+      {judge && (
         <div className="font-mono text-[10px] tracking-wider uppercase text-paytar-muted bg-paytar-bg p-2 rounded">
-          verifier: <span className="text-paytar-accent-ink">{verifier}</span>
-          {stats?.inference_ms != null && <> · inference: <b className="text-paytar-ink">{stats.inference_ms.toFixed(0)}ms</b></>}
-          {stats?.raw_span_count != null && <> · raw spans: <b className="text-paytar-ink">{stats.raw_span_count}</b></>}
+          judge: <span className="text-paytar-accent-ink">{judge}</span>
         </div>
       )}
 
       <div className="flex flex-wrap gap-3 font-mono text-[11px]">
         <Pill label="action" value={action} tone={action === "passed" ? "ok" : action === "filtered" ? "warn" : "danger"} />
         <Pill label="cümle" value={String(stats?.total ?? "?")} />
-        <Pill label="halluc'lı" value={String(stats?.specific ?? 0)} />
-        <Pill label="temiz" value={String(stats?.generic ?? 0)} />
+        <Pill label="claim" value={String(stats?.claims ?? 0)} />
+        <Pill label="filler" value={String(stats?.filler ?? 0)} />
+        <Pill label="kept" value={String(stats?.kept ?? 0)} tone="ok" />
         <Pill label="dropped" value={String(stats?.dropped ?? 0)} tone={(stats?.dropped ?? 0) > 0 ? "warn" : "ok"} />
-        {stats?.answer_halluc_ratio != null && (
-          <Pill
-            label="yanıt halluc oranı"
-            value={`${(stats.answer_halluc_ratio * 100).toFixed(1)}% (${stats.answer_halluc_chars}/${stats.answer_total_chars}ch)`}
-            tone={stats.answer_halluc_ratio > 0.4 ? "danger" : stats.answer_halluc_ratio > 0.2 ? "warn" : "ok"}
-          />
-        )}
+        <Pill label="drop_ratio" value={`${((stats?.drop_ratio ?? 0) * 100).toFixed(0)}%`} tone={(stats?.drop_ratio ?? 0) > 0.4 ? "danger" : "ok"} />
       </div>
 
       <div className="border border-paytar-line rounded-md bg-paytar-bg/30 overflow-hidden">
         <div className="font-mono text-[10px] tracking-wider uppercase text-paytar-accent-ink px-3 py-2 border-b border-paytar-line bg-paytar-surface2">
-          Cümle-bazlı halüsinasyon haritası — kırmızı span'lar LettuceDetect'in chunk'larda bulamadığı yerler
+          Cümle-bazlı atıf haritası — "Kaynak N" butonu chunk'in tam metnini açar
         </div>
         <div className="divide-y divide-paytar-line">
-          {sentences.map((s, i) => (
-            <SentenceRow key={i} idx={i + 1} s={s} sources={resp.sources} />
+          {sentences.map((s) => (
+            <CitationRow key={s.idx} s={s} openChunk={openChunk} />
           ))}
         </div>
       </div>
 
-      {rawSpans.length > 0 && (
-        <Collapsible title={`Tüm raw spans (${rawSpans.length}) — LettuceDetect ham çıktısı`}>
-          <div className="space-y-1.5 max-h-[300px] overflow-y-auto">
-            {rawSpans.map((sp, i) => (
-              <div key={i} className="flex items-start gap-3 text-[12px] bg-paytar-bg p-2 rounded border border-paytar-line">
-                <span className="font-mono text-[10px] text-paytar-muted whitespace-nowrap pt-0.5">#{i + 1}</span>
-                <span className="font-mono text-[10px] text-paytar-muted whitespace-nowrap pt-0.5">
-                  [{sp.start}-{sp.end}]
-                </span>
-                <div className="flex-1 min-w-0">
-                  <div className="text-paytar-ink break-words">{sp.text}</div>
-                </div>
-                <span className={`font-mono text-[10px] px-1.5 py-0.5 rounded-sm whitespace-nowrap ${
-                  sp.confidence > 0.8 ? "bg-destructive/20 text-destructive" :
-                  sp.confidence > 0.5 ? "bg-amber-100 text-amber-800" :
-                  "bg-paytar-surface2 text-paytar-muted"
-                }`}>
-                  {(sp.confidence * 100).toFixed(0)}%
-                </span>
-              </div>
-            ))}
+      <Collapsible title="LLM judge prompt">
+        <pre className="text-[11px] font-mono whitespace-pre-wrap bg-paytar-bg p-3 rounded-md border border-paytar-line max-h-[400px] overflow-y-auto">{String(inp.prompt ?? "")}</pre>
+      </Collapsible>
+      <Collapsible title="LLM judge raw response (JSON, asama 1)">
+        <pre className="text-[11px] font-mono whitespace-pre-wrap bg-paytar-bg p-3 rounded-md border border-paytar-line max-h-[300px] overflow-y-auto">{String(out.raw_response ?? "")}</pre>
+      </Collapsible>
+      <Collapsible title="LLM verifier raw response (JSON, asama 2 — Claude Opus 4.8)">
+        <pre className="text-[11px] font-mono whitespace-pre-wrap bg-paytar-bg p-3 rounded-md border border-paytar-line max-h-[300px] overflow-y-auto">{String(out.verifier_raw_response ?? "(yok)")}</pre>
+        {Boolean(out.verifier_error) && (
+          <div className="mt-2 text-[11px] font-mono text-destructive bg-destructive/10 border border-destructive/30 rounded px-2 py-1">
+            Verifier hata: {String(out.verifier_error)}
           </div>
-        </Collapsible>
-      )}
-
-      <Collapsible title="Context block (LettuceDetect'e giden kaynak metni)">
-        <pre className="text-[11px] font-mono whitespace-pre-wrap bg-paytar-bg p-3 rounded-md border border-paytar-line max-h-[400px] overflow-y-auto">{String(inp.context ?? "")}</pre>
+        )}
       </Collapsible>
       <Collapsible title="Draft IN (filtre öncesi — generator'ın ham yanıtı)">
         <pre className="text-[12px] whitespace-pre-wrap bg-paytar-bg p-3 rounded-md border border-paytar-line max-h-[400px] overflow-y-auto">{String(inp.draft_in)}</pre>
       </Collapsible>
-      <Collapsible title="Draft OUT (filtre sonrası — critic'e giden)" defaultOpen>
+      <Collapsible title="Draft OUT (filtre sonrası — inline [Kaynak N] etiketli)" defaultOpen>
         <pre className="text-[12px] whitespace-pre-wrap bg-paytar-bg p-3 rounded-md border border-paytar-line max-h-[400px] overflow-y-auto">{String(out.draft_out)}</pre>
       </Collapsible>
     </div>
   );
 }
 
-function SentenceRow({ idx, s, sources }: { idx: number; s: GroundedSentence; sources: { title: string; snippet: string }[] }) {
-  const [showChunk, setShowChunk] = useState(false);
-  const chunkData = s.chunk && sources[s.chunk - 1];
+function CitationRow({
+  s, openChunk,
+}: { s: SentenceCitation; openChunk: OpenChunkFn }) {
   const dropped = !s.supported;
-  const spans = s.hallucination_spans ?? [];
-  const ratio = s.hallucination_ratio ?? 0;
-
-  // Build inline highlighted segments — span'ları kırmızıyla işaretle
-  const highlighted = renderHighlighted(s.text, spans);
-
+  const isClaim = s.type === "claim";
   return (
     <div className={`px-3 py-2 ${dropped ? "bg-destructive/5" : ""}`}>
       <div className="flex items-start gap-3">
-        <span className="font-mono text-[10px] text-paytar-muted w-6 text-right pt-0.5">{idx}</span>
+        <span className="font-mono text-[10px] text-paytar-muted w-6 text-right pt-0.5">{s.idx}</span>
         <div className="flex-1 min-w-0">
-          <div className={`text-[13px] leading-relaxed ${dropped ? "opacity-70" : ""}`}>{highlighted}</div>
-          {spans.length > 0 && (
-            <div className="mt-1.5 space-y-0.5">
-              {spans.map((sp, i) => (
-                <div key={i} className="text-[11px] font-mono text-destructive flex items-center gap-2">
-                  <span className="bg-destructive/15 px-1.5 py-0.5 rounded">{(sp.confidence * 100).toFixed(0)}%</span>
-                  <span className="text-paytar-muted">halluc:</span>
-                  <span className="text-paytar-ink2 truncate">{sp.text}</span>
-                </div>
-              ))}
+          <div className={`text-[13px] leading-relaxed ${dropped ? "opacity-70 line-through" : ""}`}>{s.text}</div>
+          {s.missing_from_llm && (
+            <div className="mt-1 text-[10px] font-mono text-amber-700">
+              ⚠ LLM judge bu cümleyi atladı — güvenli tarafta &quot;claim+null&quot; sayıldı
+            </div>
+          )}
+          {s.verify_reason === "reassigned" && (
+            <div className="mt-1 text-[10px] font-mono text-blue-700">
+              🔄 Hardcode: Judge &quot;Kaynak {s.chunk_id_judge}&quot; dedi, evidence Kaynak {s.chunk_id_hardcode}&apos;de bulundu
+            </div>
+          )}
+          {s.verify_reason === "not_found" && (
+            <div className="mt-1 text-[10px] font-mono text-amber-700">
+              ⚠ Hardcode: Judge &quot;Kaynak {s.chunk_id_judge}&quot; dedi ama evidence hiçbir chunkta substring olarak yok
+            </div>
+          )}
+          {s.verifier_status === "supported" && s.chunk_id_judge !== s.chunk_id && s.chunk_id != null && (
+            <div className="mt-1 text-[10px] font-mono text-emerald-700">
+              ✓ Verifier (Claude Opus 4.8): Kaynak {s.chunk_id} doğru, judge ilk &quot;{s.chunk_id_judge}&quot; demişti → düzeltildi
+            </div>
+          )}
+          {s.verifier_status === "supported" && s.chunk_id_judge === s.chunk_id && (
+            <div className="mt-1 text-[10px] font-mono text-emerald-700">
+              ✓ Verifier (Claude Opus 4.8): Kaynak {s.chunk_id} onayladı
+            </div>
+          )}
+          {s.verifier_status === "not_supported" && (
+            <div className="mt-1 text-[10px] font-mono text-amber-700">
+              ✗ Verifier (Claude Opus 4.8): hiçbir kaynakta anlamsal destek yok → drop
+            </div>
+          )}
+          {(s.verifier_status === "llm_error" || s.verifier_status === "parse_error" || s.verifier_status === "missing_from_llm") && (
+            <div className="mt-1 text-[10px] font-mono text-paytar-muted">
+              ℹ Verifier hata verdi ({s.verifier_status}) — hardcode sonucu kullanılıyor
             </div>
           )}
         </div>
         <div className="flex items-center gap-1.5 flex-shrink-0">
-          {spans.length === 0 ? (
-            <span className="font-mono text-[10px] px-1.5 py-0.5 rounded-sm bg-paytar-accent-soft text-paytar-accent-ink uppercase tracking-wider">✓ temiz</span>
-          ) : dropped ? (
-            <span className="font-mono text-[10px] px-1.5 py-0.5 rounded-sm bg-destructive/20 text-destructive uppercase tracking-wider">
-              ✗ drop ({(ratio * 100).toFixed(0)}%)
-            </span>
+          {isClaim ? (
+            <span className="font-mono text-[10px] px-1.5 py-0.5 rounded-sm bg-blue-100 text-blue-800 uppercase tracking-wider">claim</span>
           ) : (
-            <span className="font-mono text-[10px] px-1.5 py-0.5 rounded-sm bg-amber-100 text-amber-800 uppercase tracking-wider">
-              ⚠ {(ratio * 100).toFixed(0)}% halluc — eşik altı, korundu
-            </span>
+            <span className="font-mono text-[10px] px-1.5 py-0.5 rounded-sm bg-paytar-surface2 text-paytar-muted uppercase tracking-wider">filler</span>
           )}
-          {s.chunk && (
+          {dropped ? (
+            <span className="font-mono text-[10px] px-1.5 py-0.5 rounded-sm bg-destructive/20 text-destructive uppercase tracking-wider">
+              ✗ drop
+            </span>
+          ) : isClaim && s.chunk_id ? (
             <button
-              onClick={() => setShowChunk(!showChunk)}
-              className="font-mono text-[10px] px-1.5 py-0.5 rounded-sm bg-paytar-surface2 text-paytar-ink2 hover:bg-paytar-accent-soft transition-colors"
+              onClick={() => openChunk(s.chunk_id as number, s.text, s.evidence ?? undefined)}
+              className="font-mono text-[10px] px-1.5 py-0.5 rounded-sm bg-paytar-accent-soft text-paytar-accent-ink hover:bg-paytar-accent hover:text-paytar-surface transition-colors uppercase tracking-wider"
+              title="Kaynak metnini aç"
             >
-              Chunk {s.chunk}
+              Kaynak {s.chunk_id}
             </button>
+          ) : (
+            <span className="font-mono text-[10px] px-1.5 py-0.5 rounded-sm bg-paytar-accent-soft text-paytar-accent-ink uppercase tracking-wider">✓ keep</span>
           )}
         </div>
       </div>
-      {showChunk && chunkData && (
-        <div className="mt-2 ml-9 p-2.5 bg-paytar-surface2 border border-paytar-line rounded text-[11px] text-paytar-ink2">
-          <div className="font-mono text-[10px] text-paytar-accent-ink mb-1">{chunkData.title}</div>
-          <div className="whitespace-pre-wrap leading-relaxed">{chunkData.snippet}</div>
-        </div>
-      )}
     </div>
   );
 }
 
-/**
- * Cümlede halüsinasyon span'larını inline kırmızı highlight olarak göster.
- * Sentence text içinde span.relative_start/end aralıklarını işaretler.
- */
-function renderHighlighted(text: string, spans: HallucinationSpan[]): React.ReactNode {
-  if (!spans.length) return text;
-  const sorted = [...spans].sort((a, b) => a.relative_start - b.relative_start);
-  const parts: React.ReactNode[] = [];
-  let cursor = 0;
-  sorted.forEach((sp, i) => {
-    const start = Math.max(cursor, sp.relative_start);
-    const end = Math.min(text.length, sp.relative_end);
-    if (start > cursor) parts.push(<span key={`p${i}`}>{text.slice(cursor, start)}</span>);
-    if (end > start) {
-      parts.push(
-        <span
-          key={`h${i}`}
-          className="bg-destructive/25 text-destructive font-medium underline decoration-destructive decoration-wavy underline-offset-2"
-          title={`Halluc, confidence ${(sp.confidence * 100).toFixed(0)}%`}
+/* ─────────────────────────────────────────────────────────── */
+/*  CHUNK MODAL — tam metin + sentence highlight                */
+/* ─────────────────────────────────────────────────────────── */
+
+function ChunkModal({
+  chunk, chunkId, highlightSentence, evidence, onClose,
+}: {
+  chunk: ChunkFull | undefined;
+  chunkId: number;
+  highlightSentence: string | null;
+  /** Judge'in chunk'tan birebir aldigi alinti — varsa highlight onunla yapilir. */
+  evidence: string | null;
+  onClose: () => void;
+}) {
+  if (!chunk) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
+        <div
+          className="bg-paytar-surface border border-paytar-line rounded-2xl p-5 max-w-2xl"
+          onClick={(e) => e.stopPropagation()}
         >
-          {text.slice(start, end)}
-        </span>
-      );
-    }
-    cursor = Math.max(cursor, end);
-  });
-  if (cursor < text.length) parts.push(<span key="tail">{text.slice(cursor)}</span>);
-  return parts;
-}
-
-/* ─────────────────────────────────────────────────────────── */
-/*  CRITIC detail                                                */
-/* ─────────────────────────────────────────────────────────── */
-
-function CriticDetail({ entry }: { entry: TraceEntry }) {
-  const inp = entry.input as Record<string, unknown>;
-  const out = entry.output as Record<string, unknown>;
-  const parsed = out.judge_parsed_json as Record<string, boolean> | undefined;
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="font-serif text-lg">Kaynak {chunkId}</h3>
+            <button onClick={onClose} className="text-paytar-muted hover:text-paytar-ink">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+          <p className="text-sm text-paytar-muted">Kaynak metni bulunamadı (chunks listesinde yok).</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="space-y-3 font-sans text-sm">
-      <div className="flex flex-wrap gap-2 font-mono text-[11px]">
-        <Pill label="decision" value={String(out.decision)} tone={String(out.decision).includes("accepted") ? "ok" : "danger"} />
-        <Pill label="judge_ok" value={String(out.judge_ok)} tone={out.judge_ok ? "ok" : "warn"} />
-        <Pill label="attempt_in" value={String(inp.attempts_in)} />
-        <Pill label="source_has_emergency" value={String(out.source_has_emergency)} />
-      </div>
-
-      {parsed && (
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
-          {Object.entries(parsed).map(([k, v]) => (
-            <Pill key={k} label={k} value={String(v)} tone={v ? "ok" : "danger"} />
-          ))}
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-paytar-surface border border-paytar-line rounded-2xl max-w-3xl w-full max-h-[85vh] flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-3 px-5 py-4 border-b border-paytar-line">
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <span className="font-mono text-[11px] tracking-wider uppercase text-paytar-accent-ink">
+                Kaynak {chunkId}
+              </span>
+              {chunk.language && (
+                <span className={`font-mono text-[10px] px-1 py-0.5 rounded ${
+                  chunk.language === "en" ? "bg-blue-100 text-blue-800" : "bg-amber-100 text-amber-800"
+                }`}>{chunk.language.toUpperCase()}</span>
+              )}
+              <span className="font-mono text-[10px] text-paytar-muted">σ={chunk.score?.toFixed(4)}</span>
+            </div>
+            <h3 className="font-serif text-lg text-paytar-ink">{chunk.title}</h3>
+            {highlightSentence && (
+              <div className="mt-2 text-[11px] font-mono text-paytar-muted">
+                Aranan cümle: <span className="text-paytar-ink2 italic">&quot;{highlightSentence.slice(0, 120)}{highlightSentence.length > 120 ? "..." : ""}&quot;</span>
+              </div>
+            )}
+            {evidence && (
+              <div className="mt-1 text-[11px] font-mono text-paytar-accent-ink">
+                Destek alıntısı (judge): <span className="text-paytar-ink2 italic">&quot;{evidence.slice(0, 160)}{evidence.length > 160 ? "..." : ""}&quot;</span>
+              </div>
+            )}
+          </div>
+          <button
+            onClick={onClose}
+            className="flex-shrink-0 w-8 h-8 rounded-md flex items-center justify-center text-paytar-muted hover:bg-paytar-surface2"
+            aria-label="Kapat"
+          >
+            <X className="w-5 h-5" />
+          </button>
         </div>
-      )}
 
-      {Boolean(out.judge_problems) && (
-        <Field label="Judge problems" value={String(out.judge_problems)} mono />
-      )}
-      {Boolean(out.judge_error) && (
-        <Field label="Judge error" value={String(out.judge_error)} mono />
-      )}
+        <div className="flex-1 overflow-y-auto px-5 py-4">
+          <ChunkBody text={chunk.text} highlight={highlightSentence} evidence={evidence} />
+        </div>
 
-      <Collapsible title="Judge prompt (Cerebras gpt-oss-120b)">
-        <pre className="text-[11px] font-mono whitespace-pre-wrap bg-paytar-bg p-3 rounded-md border border-paytar-line max-h-[400px] overflow-y-auto">{String(out.judge_prompt)}</pre>
-      </Collapsible>
-      <Collapsible title="Judge raw response">
-        <pre className="text-[11px] font-mono whitespace-pre-wrap bg-paytar-bg p-3 rounded-md border border-paytar-line max-h-[300px] overflow-y-auto">{String(out.judge_raw_response)}</pre>
-      </Collapsible>
+        <div className="px-5 py-3 border-t border-paytar-line font-mono text-[10px] text-paytar-muted flex justify-between">
+          <span>{chunk.text.length} char</span>
+          <button onClick={onClose} className="text-paytar-accent-ink hover:underline">Kapat (esc)</button>
+        </div>
+      </div>
     </div>
   );
 }
 
+function ChunkBody({
+  text, highlight, evidence,
+}: { text: string; highlight: string | null; evidence: string | null }) {
+  // Once evidence (judge'in birebir alintisi) ile dene; yoksa cumlenin kendisi
+  // (strict matcher; parafraz cumle eslesmezse null → yanlis yesil olusmaz).
+  const matchedRange =
+    (evidence && findEvidenceRange(text, evidence)) ||
+    (highlight && findEvidenceRange(text, highlight)) ||
+    null;
+  if (!matchedRange) {
+    return <pre className="font-sans text-[13px] text-paytar-ink whitespace-pre-wrap leading-relaxed">{text}</pre>;
+  }
+  const [start, end] = matchedRange;
+  return (
+    <pre className="font-sans text-[13px] text-paytar-ink whitespace-pre-wrap leading-relaxed">
+      {text.slice(0, start)}
+      <mark className="bg-paytar-accent-soft text-paytar-accent-ink px-0.5 rounded">
+        {text.slice(start, end)}
+      </mark>
+      {text.slice(end)}
+    </pre>
+  );
+}
+
 /* ─────────────────────────────────────────────────────────── */
-/*  FINAL RESPONSE                                              */
+/*  FINAL RESPONSE — inline [Kaynak N] tiklanabilir            */
 /* ─────────────────────────────────────────────────────────── */
 
-function FinalResponse({ resp }: { resp: ChatResponse }) {
+function FinalResponse({ resp, openChunk }: { resp: ChatResponse; openChunk: OpenChunkFn }) {
+  const citations = resp.sentence_citations ?? [];
   return (
     <section className="bg-paytar-surface border border-paytar-accent rounded-2xl p-5">
       <div className="flex items-baseline justify-between mb-3">
         <h2 className="font-serif text-lg text-paytar-ink">Final response</h2>
         <span className="font-mono text-[10px] text-paytar-muted tracking-wider">
-          {resp.response.length} char · confidence={resp.evidence_confidence}
+          {resp.response.length} char · confidence={resp.evidence_confidence} ·
+          {citations.length} cümle (claim={citations.filter((s) => s.type === "claim" && s.supported).length}, filler={citations.filter((s) => s.type === "filler").length}, dropped={citations.filter((s) => !s.supported).length})
         </span>
       </div>
-      <pre className="font-sans text-sm text-paytar-ink whitespace-pre-wrap leading-relaxed">{resp.response}</pre>
+      <div className="font-sans text-sm text-paytar-ink leading-relaxed whitespace-pre-wrap">
+        {renderResponseWithCitations(resp.response, openChunk, citations)}
+      </div>
     </section>
   );
+}
+
+/**
+ * Yanit metnindeki "[Kaynak N]" desenlerini tiklanabilir butonlara cevir.
+ * Her chunk_id icin K'inci geciste citations listesindeki K'inci claim'i
+ * acmaya yollar (per-occurrence eslestirme). Boylece ayni chunk farkli
+ * cumlelerden referans alindiginda her tikla dogru cumle/evidence gelir.
+ */
+function renderResponseWithCitations(
+  text: string,
+  openChunk: OpenChunkFn,
+  citations: SentenceCitation[],
+): React.ReactNode {
+  const claimsByChunk = new Map<number, SentenceCitation[]>();
+  for (const c of citations) {
+    if (c.type !== "claim" || !c.supported || c.chunk_id == null) continue;
+    if (!claimsByChunk.has(c.chunk_id)) claimsByChunk.set(c.chunk_id, []);
+    claimsByChunk.get(c.chunk_id)!.push(c);
+  }
+  const counter: Record<number, number> = {};
+
+  const pattern = /\[Kaynak\s+(\d+)\]/g;
+  const parts: React.ReactNode[] = [];
+  let cursor = 0;
+  let match: RegExpExecArray | null;
+  let keyN = 0;
+
+  while ((match = pattern.exec(text)) !== null) {
+    const start = match.index;
+    const end = start + match[0].length;
+    const chunkId = parseInt(match[1], 10);
+    if (start > cursor) {
+      parts.push(<span key={`t${keyN++}`}>{text.slice(cursor, start)}</span>);
+    }
+    const occ = counter[chunkId] ?? 0;
+    counter[chunkId] = occ + 1;
+    const matchingClaim = claimsByChunk.get(chunkId)?.[occ];
+    parts.push(
+      <button
+        key={`c${keyN++}`}
+        onClick={() => openChunk(chunkId, matchingClaim?.text, matchingClaim?.evidence ?? undefined)}
+        className="font-mono text-[10px] mx-0.5 px-1.5 py-0.5 rounded bg-paytar-accent-soft text-paytar-accent-ink hover:bg-paytar-accent hover:text-paytar-surface transition-colors align-baseline"
+        title={`Kaynak ${chunkId} metnini aç`}
+      >
+        Kaynak {chunkId}
+      </button>,
+    );
+    cursor = end;
+  }
+  if (cursor < text.length) {
+    parts.push(<span key={`t${keyN++}`}>{text.slice(cursor)}</span>);
+  }
+  return parts;
 }
 
 /* ─────────────────────────────────────────────────────────── */

@@ -17,11 +17,15 @@ import time
 
 from app.rag.embeddings import embed_single
 from app.rag.qdrant_store import search
-from app.rag.step_back import generate_step_back
 from app.rag.bm25_store import bm25_search
 from app.rag.reranker import rerank
 from app.graph.audit import audit_log
 from app.graph.debug_trace import trace_node
+from app.graph.query_compose import compose_user_query
+
+# NOT: step_back kanalı v7'de KALDIRILDI. HyDE × 3 zaten kavramsal genişletmenin
+# büyük kısmını yapıyordu, step-back ile %70+ örtüşme ölçüldü. 3-5s LLM cağrısı
+# tasarrufu için kaldırıldı. step_back.py dosyası tarihsel veri için duruyor.
 
 
 def _snapshot_chunks(chunks: list[dict], top_n: int = 10) -> list[dict]:
@@ -112,15 +116,18 @@ def retriever_node(state: dict) -> dict:
     if not messages:
         return state
 
-    # Son kullanici mesajini al
-    last_user_msg = ""
-    for msg in reversed(messages):
-        if isinstance(msg, dict) and msg.get("role") == "user":
-            last_user_msg = msg.get("content", "")
-            break
-        elif hasattr(msg, "type") and msg.type == "human":
-            last_user_msg = msg.content
-            break
+    # Multi-turn destek: clarification akisinda son user mesajini ONCEKI
+    # ilgili user mesajlariyla birleştir. Boylece embed/HyDE/BM25 hepsi
+    # birlesik bağlami görür ve takip cevabi yalniz başina genel kalmaz.
+    last_user_msg = compose_user_query(messages)
+    if not last_user_msg:
+        for msg in reversed(messages):
+            if isinstance(msg, dict) and msg.get("role") == "user":
+                last_user_msg = msg.get("content", "")
+                break
+            elif hasattr(msg, "type") and msg.type == "human":
+                last_user_msg = msg.content
+                break
 
     if not last_user_msg:
         return state
@@ -143,6 +150,16 @@ def retriever_node(state: dict) -> dict:
     analysis = state.get("query_analysis") or {}
     enriched_query = analysis.get("enriched_keywords", "") or ""
     hyde_variants = analysis.get("hyde_variants", []) or []
+    # CROSS-LINGUAL: kullanici sorgusunun Ingilizce cevirisi — EN pool'unu kendi
+    # natif dilinde rerank etmek icin (LAURA paper bias mitigation + BGE-reranker
+    # en guclu olarak ayni dildeki sorgu-belge ciftlerinde calisiyor).
+    en_translated_query = analysis.get("en_translated_query", "") or ""
+    # MEDICAL REWRITE (v7) — analyzer'in ADIM 5/6'da urettiği reranker icin
+    # ozel TEK CUMLE tibbi formulasyon. composed user query uzun ve konusma
+    # dilinde olunca BGE-reranker chunk'larla zayif eslesiyordu. Bu cumleler
+    # ders kitabı diliyle yazildigi icin chunk'larla daha guclu pair'lesir.
+    tr_rerank_query_rewrite = analysis.get("tr_rerank_query", "") or ""
+    en_rerank_query_rewrite = analysis.get("en_rerank_query", "") or ""
 
     translated_results = []
     if enriched_query:
@@ -164,36 +181,22 @@ def retriever_node(state: dict) -> dict:
             filters=filters,
         ))
 
-    # --- 4. Dense retrieval (top-N) — Step-Back (geniş kavramsal form) ---
-    # Spesifik sorudan geniş kavrama çıkıp komşu konuları yakalar.
-    step_back_query = generate_step_back(last_user_msg)
-    step_back_results = []
-    if step_back_query:
-        sb_vector = embed_single(step_back_query)
-        step_back_results = search(
-            query_vector=sb_vector,
-            limit=DENSE_TOP_N,
-            score_threshold=0.25,
-            filters=filters,
-        )
-
-    # --- 5. BM25 sparse retrieval — spesifik isim/jargon eslemesi (Mortellaro vb) ---
+    # --- 4. BM25 sparse retrieval — spesifik isim/jargon eslemesi (Mortellaro vb) ---
     bm25_results = []
     try:
         bm25_results = bm25_search(last_user_msg, limit=BM25_TOP_N)
     except Exception as e:
         print(f"[Retriever] BM25 atlandi: {e}")
 
-    # --- 6. Tum kanallari birlestir (dedup, threshold, sirala) ---
+    # --- 5. Tum kanallari birlestir (dedup, threshold, sirala) ---
     # Dense skorlarin (0-1 cosine) ve BM25 (raw skor) ayni listeye girince
     # _merge_results threshold (0.30) sadece dense'e uygulanir; BM25 her zaman gecer.
     # Cross-encoder rerank zaten final precision'i saglar.
     merged = _merge_results(original_results, translated_results, limit=DENSE_TOP_N)
     merged = _merge_results(merged, hyde_results_all, limit=DENSE_TOP_N)
-    merged = _merge_results(merged, step_back_results, limit=DENSE_TOP_N)
 
     # Confidence gate icin ORIJINAL dense top skor (cosine) — RRF'den ONCE
-    all_dense = original_results + translated_results + hyde_results_all + step_back_results
+    all_dense = original_results + translated_results + hyde_results_all
     dense_top_cosine = max(
         (float(r.get("score") or 0.0) for r in all_dense),
         default=0.0,
@@ -202,21 +205,34 @@ def retriever_node(state: dict) -> dict:
     # BM25 sonuclarini threshold uygulamadan ekle (skor scale farkli)
     candidates = _merge_bm25(merged, bm25_results, limit=DENSE_TOP_N + BM25_TOP_N)
 
-    # --- 5. Cross-encoder reranker (top-N -> top-K) ---
-    # Rerank query'sine TR sorgu + enriched (TR+EN) keywords birleştir.
-    # BGE-reranker-v2-m3 multilingual ama TR sorgu + EN chunk pair'inde
-    # logit'leri uniform negatif veriyor; enriched keywords (EN dahil)
-    # cross-encoder'in semantik eşlemesini düzeltir.
-    # NOT: HyDE metni rerank query'sine eklenmez — HyDE halusinasyonu rerank
-    # skorlarini saptirmasin diye kullanici sorusu + keyword'ler ile sinirli.
-    if candidates:
-        if enriched_query:
-            rerank_query = f"{last_user_msg} | {enriched_query}"
-        else:
-            rerank_query = last_user_msg
-        final_docs = rerank(rerank_query, candidates, top_k=RERANK_TOP_K)
-    else:
-        final_docs = []
+    # --- 6. LANGUAGE-BALANCED RERANK (v4 — LAURA paper bias mitigation) ---
+    # Eski: tek bir rerank cagrisi, TR sorgu + EN keyword stuffing, butun karisik pool.
+    # Sorun: BGE-reranker-v2-m3 TR query + EN chunk pair'inde sistematik bias →
+    #        EN chunk'lar (Rebhuns) top-3'e giremiyor.
+    # Cozum: candidates'i dile gore ikiye bol, her pool kendi NATIF dilindeki sorgu
+    #        ile rerank et. TR pool TR query gorur, EN pool en_translated_query gorur.
+    #        Sonuc concatenated (re-sort yok) → generator her dilden top-K gorur.
+    # Kaynak: arxiv 2604.20199 (LAURA), arxiv 2311.09175 (no keyword stuffing in rerank).
+    tr_candidates = [c for c in candidates if (c.get("metadata") or {}).get("language") == "tr"]
+    en_candidates = [c for c in candidates if (c.get("metadata") or {}).get("language") == "en"]
+
+    # TR pool rerank query — oncelik fallback chain:
+    #   1) Analyzer'in TR tibbi rewrite'i (ADIM 5) — ders kitabi diliyle pair'lesme
+    #   2) Composed user msg (multi-turn ham metin) — eski davranis
+    tr_rerank_query = tr_rerank_query_rewrite or last_user_msg
+    tr_top = rerank(tr_rerank_query, tr_candidates, top_k=RERANK_TOP_K) if tr_candidates else []
+
+    # EN pool rerank query — oncelik fallback chain:
+    #   1) Analyzer'in EN tibbi rewrite'i (ADIM 6) — tibbi tek cumle
+    #   2) Analyzer'in dogal EN_QUERY cevirisi (ADIM 4)
+    #   3) Composed user msg (en kotu durum)
+    en_rerank_query = en_rerank_query_rewrite or en_translated_query or last_user_msg
+    en_top = rerank(en_rerank_query, en_candidates, top_k=RERANK_TOP_K) if en_candidates else []
+
+    # Generator'a giden final sira: TR top-K ardindan EN top-K, RE-SORT YOK.
+    # (Cross-encoder logit scale'i diller arasi karsilastirilabilir degil —
+    #  TR-TR ciftleri her zaman daha yuksek logit; merge sort bias geri getirir.)
+    final_docs = tr_top + en_top
 
     state["retrieved_docs"] = final_docs
 
@@ -250,7 +266,6 @@ def retriever_node(state: dict) -> dict:
             f"candidates={len(candidates)} "
             f"(orig={len(original_results)}, enriched={len(translated_results)}, "
             f"hyde_variants={len(hyde_variants)} [{len(hyde_results_all)} chunks], "
-            f"step_back={'yes' if step_back_query else 'no'} [{len(step_back_results)} chunks], "
             f"bm25={len(bm25_results)}), "
             f"reranked_top_k={len(final_docs)}, "
             f"dense_top={state['retrieval_similarity_score']:.4f}, "
@@ -266,12 +281,29 @@ def retriever_node(state: dict) -> dict:
         meta = d.get("metadata", {}) or {}
         final_snapshot.append({
             "title": meta.get("source_title", "?"),
+            "language": meta.get("language", "?"),
             "dense_score": round(float(d.get("score") or 0.0), 4),
             "rerank_logit": round(float(d.get("rerank_logit") or 0.0), 4),
             "rerank_sigmoid": round(float(d.get("rerank_score") or 0.0), 4),
             "text_full": d.get("text", "") or "",
             "text_len": len(d.get("text", "") or ""),
         })
+
+    # TR ve EN pool'larin ayri snapshot'lari (UI ayri ayri gostermek icin)
+    def _snapshot_reranked(docs: list[dict]) -> list[dict]:
+        out = []
+        for d in docs:
+            meta = d.get("metadata", {}) or {}
+            out.append({
+                "title": meta.get("source_title", "?"),
+                "language": meta.get("language", "?"),
+                "dense_score": round(float(d.get("score") or 0.0), 4),
+                "rerank_logit": round(float(d.get("rerank_logit") or 0.0), 4),
+                "rerank_sigmoid": round(float(d.get("rerank_score") or 0.0), 4),
+                "text_full": d.get("text", "") or "",
+                "text_len": len(d.get("text", "") or ""),
+            })
+        return out
 
     trace_node(
         state,
@@ -280,19 +312,29 @@ def retriever_node(state: dict) -> dict:
             "user_query": last_user_msg,
             "enriched_keywords": enriched_query,
             "hyde_variants": hyde_variants,
-            "step_back_query": step_back_query,
-            "rerank_query": (f"{last_user_msg} | {enriched_query}" if enriched_query else last_user_msg) if candidates else "",
+            "en_translated_query": en_translated_query,
+            # Analyzer'in ADIM 5/6 rewrite'lari — debug panelinde gorulebilsin diye
+            "tr_rerank_rewrite": tr_rerank_query_rewrite,
+            "en_rerank_rewrite": en_rerank_query_rewrite,
+            # Reranker'a fiilen GIDEN sorgu (fallback chain sonucu)
+            "tr_rerank_query": tr_rerank_query,
+            "en_rerank_query": en_rerank_query,
         },
         output={
             "channels": {
                 "original_dense":  _snapshot_chunks(original_results, top_n=10),
                 "enriched_dense":  _snapshot_chunks(translated_results, top_n=10),
                 "hyde_dense":      _snapshot_chunks(hyde_results_all, top_n=10),
-                "step_back_dense": _snapshot_chunks(step_back_results, top_n=10),
                 "bm25_sparse":     _snapshot_chunks(bm25_results, top_n=10),
             },
             "candidates_count": len(candidates),
             "candidates_top10": _snapshot_chunks(candidates, top_n=10),
+            "language_pools": {
+                "tr_pool_size": len(tr_candidates),
+                "en_pool_size": len(en_candidates),
+                "tr_reranked": _snapshot_reranked(tr_top),
+                "en_reranked": _snapshot_reranked(en_top),
+            },
             "reranked_top_k": final_snapshot,
             "scores": {
                 "dense_top": round(dense_top_cosine, 4),

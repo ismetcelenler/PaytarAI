@@ -6,9 +6,9 @@ import { ArrowLeft } from "lucide-react";
 import { usePaytarChat } from "@/hooks/use-paytar-chat";
 import { PaytarMark, PaytarWordmark } from "@/components/paytar/brand";
 import { PaytarComposer } from "@/components/paytar/composer";
+import { PipelineProgress } from "@/components/paytar/pipeline-progress";
 import {
   AssistantBubble,
-  TypingIndicator,
   UserBubble,
 } from "@/components/paytar/message";
 
@@ -31,23 +31,36 @@ const SYMPTOM_CATEGORIES: SymptomCat[] = [
 ];
 
 export default function ProducerDashboard() {
-  const { messages, pending, error, send } = usePaytarChat("producer");
+  const {
+    messages, pending, error, send,
+    streamSteps, streamStartedAt,
+  } = usePaytarChat("producer");
   const [selectedCat, setSelectedCat] = useState<string | null>(null);
   const [showGuide, setShowGuide] = useState(true);
+  const [elapsedMs, setElapsedMs] = useState(0);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!streamStartedAt) {
+      setElapsedMs(0);
+      return;
+    }
+    const t = setInterval(() => setElapsedMs(Date.now() - streamStartedAt), 100);
+    return () => clearInterval(t);
+  }, [streamStartedAt]);
 
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [messages, pending]);
+  }, [messages, pending, streamSteps.length]);
 
   const isEmpty = messages.length === 0;
   const showSymptomScreen = showGuide && isEmpty;
 
-  const sendQuery = (q: string) => {
+  const sendQuery = (q: string, opts?: { responseLength?: import("@/types/chat").ResponseLength }) => {
     setShowGuide(false);
-    send(q);
+    send(q, opts);
   };
 
   const pickExample = (catId: string, ex: string) => {
@@ -152,7 +165,13 @@ export default function ProducerDashboard() {
                   <AssistantBubble key={m.id} message={m} showActions={false} />
                 )
               )}
-              {pending && <TypingIndicator />}
+              {pending && (
+                <PipelineProgress
+                  steps={streamSteps}
+                  isStreaming={pending}
+                  elapsedMs={elapsedMs}
+                />
+              )}
               {error && (
                 <div className="font-mono text-[11px] text-destructive bg-destructive/10 border border-destructive/30 rounded-md px-3 py-2 mt-2">
                   {error}
@@ -165,7 +184,7 @@ export default function ProducerDashboard() {
         <PaytarComposer
           placeholder="Sorununu yaz (örn: ineğim yem yemiyor, halsiz)…"
           disabled={pending}
-          onSend={(text) => sendQuery(text)}
+          onSend={(text, opts) => sendQuery(text, { responseLength: opts.responseLength })}
           hint="↵ GÖNDER · ⇧↵ YENİ SATIR"
         />
       </div>

@@ -51,6 +51,14 @@ def confidence_node(state: dict) -> dict:
         audit_log(state, "confidence_skip_oos", reason="scope_check out_of_scope")
         return state
 
+    # === CLARIFICATION GATE: clarification_node zaten final_response koydu, ezme ===
+    # response_status = "clarification_needed" veya "clarification_exhausted"
+    if status in ("clarification_needed", "clarification_exhausted"):
+        # evidence_confidence clarification_node icinde set edildi (low/insufficient)
+        audit_log(state, "confidence_skip_clarification",
+                  reason=f"status={status}, attempts={state.get('clarification_attempts', 0)}")
+        return state
+
     # === PHASE 0 GATE: dusuk similarity ise generator yanitini ezip template ver ===
     if similarity < INSUFFICIENT_THRESHOLD and similarity > 0:
         template = LOW_CONFIDENCE_TEMPLATE_PRODUCER if user_role == "producer" else LOW_CONFIDENCE_TEMPLATE_VET

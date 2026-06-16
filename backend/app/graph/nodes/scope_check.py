@@ -14,6 +14,7 @@ import time
 from app.rag.query_analyzer import analyze_query
 from app.graph.audit import audit_log
 from app.graph.debug_trace import trace_node, trim_text
+from app.graph.query_compose import compose_user_query
 
 
 OUT_OF_SCOPE_TEMPLATE = (
@@ -34,14 +35,18 @@ def scope_check_node(state: dict) -> dict:
         state["response_status"] = "error"
         return state
 
-    last_user_msg = ""
-    for msg in reversed(messages):
-        if isinstance(msg, dict) and msg.get("role") == "user":
-            last_user_msg = msg.get("content", "")
-            break
-        elif hasattr(msg, "type") and msg.type == "human":
-            last_user_msg = msg.content
-            break
+    # Multi-turn destek: clarification akisinda son user mesajini ONCEKI
+    # ilgili user mesajlariyla birleştir → analyzer daha iyi HyDE üretir.
+    last_user_msg = compose_user_query(messages)
+    if not last_user_msg:
+        # Fallback (legacy): sadece son user mesajini al
+        for msg in reversed(messages):
+            if isinstance(msg, dict) and msg.get("role") == "user":
+                last_user_msg = msg.get("content", "")
+                break
+            elif hasattr(msg, "type") and msg.type == "human":
+                last_user_msg = msg.content
+                break
 
     if not last_user_msg:
         state["response_status"] = "error"

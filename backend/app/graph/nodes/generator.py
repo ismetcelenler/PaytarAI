@@ -14,6 +14,31 @@ from app.graph.audit import audit_log
 from app.graph.debug_trace import trace_node, trim_text
 
 
+# Yanit uzunlugu — UI toggle'indan inject edilir.
+# ATOMIK CUMLE KURALI: Her uzunlukta "1 cumle = 1 spesifik iddia". Cumleyi
+# virgullerle uzun zincire cevirme — judge tek evidence verir, dogrulama kalmaz,
+# cumle drop edilir. Liste formati her zaman tercih edilir.
+LENGTH_INSTRUCTIONS = {
+    "short": (
+        "YANIT UZUNLUGU: KISA — MUTLAKA 3-5 maddeden bullet list olarak yaz. "
+        "Tek paragraf kullanma. Her madde TEK bir spesifik iddia icermeli "
+        "(virgulle 5 farkli sebep dizmek YASAK — her sebep ayri bir maddedir). "
+        "Maks ~80 kelime, kritik bilgi disindakini atla."
+    ),
+    "medium": (
+        "YANIT UZUNLUGU: ORTA — 5-7 maddelik bullet list veya 2 kisa paragraf. "
+        "Her cumle/madde TEK bir iddia icermeli. Kaynaklarda gecen ana bilgi. "
+        "Maks ~200 kelime."
+    ),
+    "long": (
+        "YANIT UZUNLUGU: UZUN — 8-12 maddelik bullet list veya 3-5 paragraf. "
+        "Her cumle/madde TEK bir iddia icermeli (virgulle zincir YASAK). "
+        "Ayirici taniya, yan etkilere, takip onerilerine yer ver. "
+        "Maks ~400 kelime."
+    ),
+}
+
+
 CONTEXT_TEMPLATE_VET = """SEN BIR KAYNAK-BAGLI YANIT URETICISIN.
 
 ═══════════════════════════════════════════════════════════════════
@@ -84,8 +109,10 @@ KESIN YASAK:
 ═══════════════════════════════════════════════════════════════════
 GUVENLIK ZORUNLULUKLARI (her yanitta uy):
 ═══════════════════════════════════════════════════════════════════
-✓ Yanitin SONUNDA mutlaka iki satir bulunmali:
-  - "Kaynak: [Kitap Adi], ilgili bolum"
+✓ Kaynak atifi YAZMA — sistem otomatik olarak [Kaynak N] etiketleri
+  ekleyecek (Per-Claim Citation Attribution). "Kaynak: ...", "Ref:",
+  "Bkz:" tipi satirlar EKLEME.
+✓ Yanitin SONUNDA disclaimer ekle:
   - "⚠️ Bu bilgi karar destegidir; klinik karar yetkisi sizdedir."
 ✓ Eger soruda "exitus", "ölüm", "akut kollaps", "soluyamiyor", "ciddi
   hemoraji" tipi ACIL belirtiler varsa, yaniti "ACIL SEVK GEREKLI"
@@ -93,7 +120,13 @@ GUVENLIK ZORUNLULUKLARI (her yanitta uy):
 
 YAZIM KURALLARI:
 • Birim donusumu: lb→kg, gallon→litre, oz→mL, F→C
-• Turkce yaz, yanit 6 paragrafi gecmesin
+• ATOMIK CUMLE: Her cumle TEK bir iddia icermeli. Kotu ornek:
+  "X, Y, Z, A ve B sebepleri arasinda yer alir" (5 iddia tek cumlede — judge
+  dogrulayamaz, drop edilir). Iyi ornek: ayri bullet maddeler veya
+  "Mastitis baslica nedendir. Ketozis ikinci yaygin nedendir." (her cumle 1 iddia).
+• Turkce yaz
+
+{length_instruction}
 
 KULLANICI SORUSU:
 {question}"""
@@ -172,6 +205,13 @@ KESIN YASAK:
 ═══════════════════════════════════════════════════════════════════
 GUVENLIK ZORUNLULUKLARI (her yanitta uy):
 ═══════════════════════════════════════════════════════════════════
+✓ KAYNAK ATIFI HIC YAZMA — sistem cumle sonlarina otomatik [Kaynak N]
+  ekleyecek (per-claim citation). Asagidakileri ASLA EKLEME:
+    ✗ [Kaynak 1], [Kaynak: ...], [Kaynak X]
+    ✗ 【Kaynak ...】, 【Referans ...】, 【Ref ...】
+    ✗ "Kaynak: ...", "Referans: ...", "Ref:", "Bkz:"
+    ✗ "Kaynak: [Kitap Adi], ilgili bolum" satiri
+  Hicbir kaynak/referans etiketi YOK. Sadece yanit metni.
 ✓ Yanitin SONUNA mutlaka "⚠️ Bu bilgi karar destegidir." satirini ekle
 ✓ Sade Turkce yaz — yabanci/Latince terim varsa parantez icinde acikla
 ✓ Eger kullanici "olum tehlikesi", "kan", "soluyamiyor", "hareketsiz",
@@ -181,6 +221,12 @@ GUVENLIK ZORUNLULUKLARI (her yanitta uy):
 
 YAZIM KURALLARI:
 • Birim donusumu: lb→kg, gallon→litre, oz→mL, F→C
+• ATOMIK CUMLE: Her cumle TEK bir iddia icermeli. Kotu ornek:
+  "X, Y, Z, A ve B sebepleri arasinda yer alir" (5 iddia tek cumlede — judge
+  dogrulayamaz, drop edilir). Iyi ornek: ayri bullet maddeler veya
+  "Mastitis baslica nedendir. Ketozis ikinci yaygin nedendir." (her cumle 1 iddia).
+
+{length_instruction}
 
 CIFTCININ SORUSU:
 {question}"""
@@ -188,7 +234,7 @@ CIFTCININ SORUSU:
 
 def generator_node(state: dict) -> dict:
     """
-    Generator node — Cerebras gpt-oss-120b ile yanit uretir.
+    Generator node — Groq gpt-oss-120b ile yanit uretir.
 
     Retrieved docs'u context olarak kullanir.
     Critic reddettiyse, red gerekceleriyle birlikte yeniden uretir.
@@ -239,9 +285,13 @@ def generator_node(state: dict) -> dict:
     # cumle-cumle filtreleme yapacak; generator B'ye dusup yanit kestirmesin).
     template = CONTEXT_TEMPLATE_VET if user_role == "veterinarian" else CONTEXT_TEMPLATE_PRODUCER
 
+    length_pref = state.get("response_length", "medium")
+    length_instruction = LENGTH_INSTRUCTIONS.get(length_pref, LENGTH_INSTRUCTIONS["medium"])
+
     context_msg = template.format(
         sources=sources_text,
         question=last_user_msg + rejection_context,
+        length_instruction=length_instruction,
     )
 
     # System prompt
@@ -254,6 +304,11 @@ def generator_node(state: dict) -> dict:
         #   "ders kitabi" bilgisi sizmasini onler
         # - reasoning_effort="medium": ADIM 1/2 checklist'i isletmek icin
         # OpenRouter gpt-oss-120b (paid tier — $5 credit aktif).
+        # PROVIDER PIN: Groq. gpt-oss-120b OpenRouter'da birden cok provider'da
+        # servis ediliyor (Cerebras, Fireworks, Groq...). Groq en dusuk latency +
+        # tutarli reasoning davranisi verdigi icin extra_body ile sabitlendi.
+        # allow_fallbacks=False → Groq doluysa baska provider'a kacma, hata don
+        # (latency/format tutarliligi sunum icin kritik).
         llm = ChatOpenAI(
             api_key=settings.openrouter_api_key,
             base_url="https://openrouter.ai/api/v1",
@@ -262,6 +317,12 @@ def generator_node(state: dict) -> dict:
             top_p=0.05,
             max_tokens=3000,
             reasoning_effort="medium",  # type: ignore[call-arg]
+            extra_body={
+                "provider": {
+                    "order": ["groq"],
+                    "allow_fallbacks": False,
+                }
+            },
             default_headers={
                 "HTTP-Referer": "https://github.com/paytar-ai",
                 "X-Title": "PaytarAI",
@@ -300,7 +361,7 @@ def generator_node(state: dict) -> dict:
                 draft = "\n".join(lines[-30:]) if lines else draft
 
         state["draft_response"] = draft
-        state["active_model"] = "gpt-oss-120b @ OpenRouter (medium reasoning)"
+        state["active_model"] = "gpt-oss-120b @ Groq (medium reasoning)"
         state["response_status"] = "ok"
 
         attempt_num = state.get("critic_attempts", 0) + 1
@@ -319,12 +380,13 @@ def generator_node(state: dict) -> dict:
                 "context_msg": trim_text(context_msg, 3000),
                 "sources_count": len(retrieved_docs),
                 "attempt": attempt_num,
+                "response_length": length_pref,
                 "rejection_reasons": rejection_reasons,
             },
             output={
                 "raw_response": trim_text(draft, 4000),
                 "char_count": len(draft),
-                "model": "gpt-oss-120b @ Cerebras",
+                "model": "gpt-oss-120b @ Groq",
                 "temperature": 0,
                 "top_p": 0.05,
                 "reasoning_effort": "medium",
