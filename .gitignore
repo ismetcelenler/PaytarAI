@@ -120,5 +120,8 @@ YONERGE.md
 # ----- Claude Code tooling -----
 .claude/
 
+# ----- Arastirma / ic notlar -----
+research/
+
 # ----- Gecici analiz/harness ciktilari -----
 backend/eval/_llm_judge_run.py

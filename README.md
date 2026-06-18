@@ -136,7 +136,6 @@ Sistem, gerçek kullanım senaryolarını (günlük dille yazılmış sorular, a
 ```
 backend/    FastAPI sunucusu, LangGraph akışı, RAG hattı, değerlendirme
 frontend/   Next.js arayüzü (sohbet + hata ayıklama paneli)
-research/   Araştırma ve tasarım notları
 DECISIONS.md  Mimari kararlar (ADR)
 ```
 
