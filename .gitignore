@@ -103,3 +103,22 @@ backend/eval/cache/
 
 # ----- Frontend design source (Claude Design ham ciktilari, repo'ya gerek yok) -----
 frontend.dev/
+
+# ----- Kisisel / akademik (public repo'ya gerekmez) -----
+tez_taslak.md
+tez_raporlari/
+tez.pdf
+*.docx
+
+# ----- Ic calisma notlari (dagiinik, public'e gerek yok) -----
+başlatma.txt
+yapilacaklar.png
+AI-PROMPT.md
+ERRORS.md
+YONERGE.md
+
+# ----- Claude Code tooling -----
+.claude/
+
+# ----- Gecici analiz/harness ciktilari -----
+backend/eval/_llm_judge_run.py
